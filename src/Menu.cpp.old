@@ -1,0 +1,107 @@
+#include "Menu.hpp"
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <iostream>
+
+using json = nlohmann::json;
+
+Menu::Menu(const std::string& configPath) : font_(std::nullopt), titleText_(std::nullopt) {
+  loadFromFile(configPath);
+
+  // Try to load a font from assets/fonts/ui_font.ttf
+  sf::Font tempFont;
+  if (tempFont.openFromFile("assets/fonts/ui_font.ttf")) {
+    font_ = std::move(tempFont);
+    fontLoaded_ = true;
+    
+    titleText_ = sf::Text(*font_, "PSPV2", 48);
+    titleText_->setFillColor(sf::Color::White);
+    titleText_->setPosition({40.f, 20.f});
+  } else {
+    fontLoaded_ = false;
+    std::cerr << "Warning: failed to load font at assets/fonts/ui_font.ttf\n";
+  }
+
+  rebuildText();
+}
+
+void Menu::loadFromFile(const std::string& configPath) {
+  std::ifstream ifs(configPath);
+  if (!ifs) {
+    std::cerr << "Failed to open menu config: " << configPath << "\n";
+    return;
+  }
+
+  try {
+    json j;
+    ifs >> j;
+    if (!j.contains("categories") || !j["categories"].is_array()) return;
+
+    for (const auto& cat : j["categories"]) {
+      if (!cat.contains("items") || !cat["items"].is_array()) continue;
+      for (const auto& it : cat["items"]) {
+        MenuItem mi;
+        mi.label = it.value("label", std::string("Unnamed"));
+        mi.path = it.value("path", std::string(""));
+        mi.type = it.value("type", std::string("pc_app"));
+        items_.push_back(mi);
+      }
+    }
+  } catch (const std::exception& e) {
+    std::cerr << "Error parsing menu config: " << e.what() << "\n";
+  }
+}
+
+void Menu::handleEvent(const sf::Event& event) {
+  if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
+    if (keyPressed->code == sf::Keyboard::Key::Up) {
+      if (items_.empty()) return;
+      if (currentIndex_ == 0) currentIndex_ = items_.size() - 1;
+      else --currentIndex_;
+      rebuildText();
+    } else if (keyPressed->code == sf::Keyboard::Key::Down) {
+      if (items_.empty()) return;
+      currentIndex_ = (currentIndex_ + 1) % items_.size();
+      rebuildText();
+    } else if (keyPressed->code == sf::Keyboard::Key::Enter) {
+      launchRequested_ = true;
+    }
+  }
+}
+
+void Menu::update(float /*dt*/) {
+  // For now, nothing dynamic needed; keep method for future animations
+}
+
+void Menu::rebuildText() {
+  itemTexts_.clear();
+  if (!fontLoaded_ || !font_.has_value()) return;
+
+  const float startX = 60.f;
+  float y = 100.f;
+  const unsigned int charSize = 28;
+
+  for (size_t i = 0; i < items_.size(); ++i) {
+    std::string prefix = (i == currentIndex_) ? "> " : "  ";
+    sf::Text t(*font_, prefix + items_[i].label, charSize);
+    t.setFillColor(i == currentIndex_ ? sf::Color::Yellow : sf::Color::White);
+    t.setPosition({startX, y});
+    itemTexts_.push_back(t);
+    y += charSize + 12.f;
+  }
+}
+
+void Menu::draw(sf::RenderWindow& window) {
+  if (fontLoaded_ && titleText_.has_value()) {
+    window.draw(*titleText_);
+    for (const auto& t : itemTexts_) window.draw(t);
+  } else {
+    // If font failed, draw a simple fallback using sf::Text with default font is not possible
+    // so we at least display nothing and print to stderr (already done during load)
+  }
+}
+
+MenuItem Menu::getSelectedItem() const {
+  if (items_.empty()) return MenuItem{"", "", "pc_app"};
+  return items_[currentIndex_];
+}

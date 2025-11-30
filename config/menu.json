@@ -1,0 +1,169 @@
+{
+  "categories": [
+    {
+      "id": "games",
+      "label": "Games",
+      "icon": "psp game.png",
+      "items": [
+        {
+          "label": "MotorStorm - Arctic Edge",
+          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
+          "type": "psp_iso"
+        }
+      ]
+    },
+    {
+      "id": "network",
+      "label": "Network",
+      "icon": "psp internet.png",
+      "items": [
+        {
+          "label": "Web Browser",
+          "path": "https://www.google.com",
+          "type": "web_url"
+        },
+        {
+          "label": "ROM Store",
+          "path": "https://romsfun.com/roms/playstation-portable/",
+          "type": "web_url"
+        },
+        {
+          "label": "YouTube",
+          "path": "https://www.youtube.com",
+          "type": "web_url"
+        },
+        {
+          "label": "Reddit",
+          "path": "https://www.reddit.com/r/PSP",
+          "type": "web_url"
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "label": "Media",
+      "icon": "psp music.png",
+      "items": [
+        {
+          "label": "Music Player",
+          "path": "C:/Program Files/Windows Media Player/wmplayer.exe",
+          "type": "pc_app"
+        },
+        {
+          "label": "Photo Viewer",
+          "path": "explorer.exe shell:AppsFolder\\Microsoft.Windows.Photos_8wekyb3d8bbwe!App",
+          "type": "pc_app"
+        },
+        {
+          "label": "Video Player",
+          "path": "C:/Program Files/VideoLAN/VLC/vlc.exe",
+          "type": "pc_app"
+        }
+      ]
+    },
+    {
+      "id": "savedata",
+      "label": "Saved Data",
+      "icon": "psp savedata.png",
+      "items": [
+        {
+          "label": "Open Save Folder",
+          "path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SAVEDATA",
+          "type": "folder"
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "label": "Tools",
+      "icon": "psp memorystick.png",
+      "items": [
+        {
+          "label": "File Manager",
+          "path": "explorer.exe",
+          "type": "pc_app"
+        },
+        {
+          "label": "Notepad",
+          "path": "C:/Windows/system32/notepad.exe",
+          "type": "pc_app"
+        },
+        {
+          "label": "Calculator",
+          "path": "calc.exe",
+          "type": "pc_app"
+        },
+        {
+          "label": "Task Manager",
+          "path": "taskmgr.exe",
+          "type": "pc_app"
+        },
+        {
+          "label": "Command Prompt",
+          "path": "cmd.exe",
+          "type": "pc_app"
+        },
+        {
+          "label": "PowerShell",
+          "path": "powershell.exe",
+          "type": "pc_app"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "label": "Settings",
+      "icon": "Settings.png",
+      "items": [
+        {
+          "label": "PPSSPP Settings",
+          "path": "C:/Program Files/PPSSPP/PPSSPPWindows64.exe",
+          "type": "pc_app",
+          "icon": "psp game.png"
+        },
+        {
+          "label": "Windows Settings",
+          "path": "ms-settings:",
+          "type": "web_url",
+          "icon": "psp system settings.png"
+        },
+        {
+          "label": "System Information",
+          "path": "msinfo32.exe",
+          "type": "pc_app",
+          "icon": "psp question.png"
+        },
+        {
+          "label": "Device Manager",
+          "path": "devmgmt.msc",
+          "type": "pc_app",
+          "icon": "psp usb.png"
+        },
+        {
+          "label": "Themes",
+          "path": "themes",
+          "type": "theme_select",
+          "icon": "psp theme settings.png"
+        },
+        {
+          "label": "Factory Reset",
+          "path": "factory_reset",
+          "type": "factory_reset",
+          "icon": "psp update.png"
+        }
+      ]
+    },
+    {
+      "id": "exit",
+      "label": "Exit",
+      "icon": "white-power-button-hi.png",
+      "items": [
+        {
+          "label": "Quit Application",
+          "path": "exit",
+          "type": "exit_app"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+# Build directories
+build/
+bin/
+Release/
+Debug/
+x64/
+
+# Visual Studio files
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.stamp
+*.stamp.depend
+*.stamp.list
+
+# Compiled Object files
+*.o
+*.obj
+
+# Executables
+*.exe
+*.out
+*.app
+
+# User-specific files
+config/user_profile.json
+
+# Downloads folder (user-specific ROMs)
+Downloads/
+
+# IDE
+.vscode/
+.vs/
+
+# OS files
+.DS_Store
+Thumbs.db
