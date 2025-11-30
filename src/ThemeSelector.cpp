@@ -141,6 +141,10 @@ void ThemeSelector::handleEvent(const sf::Event& event) {
                 } else {
                     selectedIndex_--;
                 }
+                // Restart animations for new selection
+                selectedScale_ = 1.0f;
+                previewAlpha_ = 0.0f;
+                targetPreviewAlpha_ = 100.0f;
                 targetParallaxX_ += 8.f;
                 soundBank_.playCursor();
                 // Update camera to center selected item
@@ -157,6 +161,10 @@ void ThemeSelector::handleEvent(const sf::Event& event) {
                 } else {
                     selectedIndex_++;
                 }
+                // Restart animations for new selection
+                selectedScale_ = 1.0f;
+                previewAlpha_ = 0.0f;
+                targetPreviewAlpha_ = 100.0f;
                 targetParallaxX_ -= 8.f;
                 soundBank_.playCursor();
                 // Update camera to center selected item
@@ -188,6 +196,10 @@ void ThemeSelector::handleEvent(const sf::Event& event) {
                     } else {
                         selectedIndex_--;
                     }
+                    // Restart animations for new selection
+                    selectedScale_ = 1.0f;
+                    previewAlpha_ = 0.0f;
+                    targetPreviewAlpha_ = 100.0f;
                     targetParallaxX_ += 8.f;
                     soundBank_.playCursor();
                     const float thumbWidth = THUMBNAIL_WIDTH;
@@ -203,6 +215,10 @@ void ThemeSelector::handleEvent(const sf::Event& event) {
                     } else {
                         selectedIndex_++;
                     }
+                    // Restart animations for new selection
+                    selectedScale_ = 1.0f;
+                    previewAlpha_ = 0.0f;
+                    targetPreviewAlpha_ = 100.0f;
                     targetParallaxX_ -= 8.f;
                     soundBank_.playCursor();
                     const float thumbWidth = THUMBNAIL_WIDTH;
@@ -311,100 +327,81 @@ void ThemeSelector::draw(sf::RenderWindow& window) {
         return;
     }
     
-    // Draw thumbnails with infinite carousel effect
-    const float centerX = 640.f;
-    const float startY = 250.f;
-    const float spacing = 30.f;
-    const float thumbWidth = THUMBNAIL_WIDTH;
-    const float itemWidth = thumbWidth + spacing;
+    // --- Thumbnail strip (centered on selection) ---
+    const float thumbWidth  = THUMBNAIL_WIDTH;
+    const float thumbHeight = THUMBNAIL_HEIGHT;
+    const float spacing     = THUMBNAIL_SPACING;
     
-    // Calculate how many clones we need to fill the screen on each side
-    const int clonesNeeded = 3; // Show 3 items on each side for smooth wraparound
-    
-    // Draw main items + clones before and after for seamless wrapping
-    for (int clone = -clonesNeeded; clone <= clonesNeeded; ++clone) {
-        for (size_t i = 0; i < themes_.size(); ++i) {
-            // Calculate position with wraparound offset
-            float baseX = centerX + (i * itemWidth) + cameraOffsetX_;
-            float xPos = baseX + (clone * themes_.size() * itemWidth);
-            float yPos = startY;
-            
-            // Skip if off-screen for performance
-            if (xPos + thumbWidth < -200.f || xPos > 1480.f) continue;
-            
-            // Check if THIS clone instance is the selected one (closest to center)
-            bool isSelected = (i == selectedIndex_) && (std::abs(xPos - centerX) < itemWidth / 2.f);
-            auto& theme = themes_[i];
-        
-        if (!theme.thumbnail) continue; // Safety check
-        
-        // Calculate scale and position with animation
+    // Center of the screen (1280 / 2)
+    const float centerX     = 640.f;
+    const float yPos        = 280.f;
+
+    for (size_t i = 0; i < themes_.size(); ++i) {
+        auto& theme = themes_[i];
+        if (!theme.thumbnail) continue;
+
+        // How far is this index from the selected one?
+        float indexOffset = static_cast<float>(static_cast<int>(i) - 
+                                               static_cast<int>(selectedIndex_));
+
+        // Place thumbnails relative to the center
+        float xPos = centerX + indexOffset * (thumbWidth + spacing);
+
+        bool isSelected = (i == selectedIndex_);
+
+        // Scale for selected / non-selected
         float currentScale = isSelected ? selectedScale_ : 1.0f;
-        float scaledWidth = thumbWidth * currentScale;
-        float scaledHeight = THUMBNAIL_HEIGHT * currentScale;
+        float scaledWidth  = thumbWidth  * currentScale;
+        float scaledHeight = thumbHeight * currentScale;
+
+        float centeredX = xPos - scaledWidth  / 2.f;
+        float centeredY = yPos - scaledHeight / 2.f;
         
-        // Center scaled thumbnail
-        float centeredX = xPos + (thumbWidth - scaledWidth) / 2.f;
-        float centeredY = yPos + (THUMBNAIL_HEIGHT - scaledHeight) / 2.f;
-        
-        // Draw shadow for depth
+        // Cull if completely off-screen to save draw calls
+        if (centeredX + scaledWidth < -thumbWidth || 
+            centeredX > 1280.f + thumbWidth) {
+            continue;
+        }
+
+        // Shadow + glow for selected thumbnail
         if (isSelected) {
             sf::RectangleShape shadow({scaledWidth + 12.f, scaledHeight + 12.f});
             shadow.setPosition({centeredX - 6.f + 4.f, centeredY - 6.f + 4.f});
             shadow.setFillColor(sf::Color(0, 0, 0, 150));
             window.draw(shadow);
-        }
-        
-        // Enhanced highlighting for selected thumbnail
-        if (isSelected) {
-            // Outer glow (animated pulsing effect could be added)
+
             sf::RectangleShape outerGlow({scaledWidth + 24.f, scaledHeight + 24.f});
             outerGlow.setPosition({centeredX - 12.f, centeredY - 12.f});
             outerGlow.setFillColor(sf::Color::Transparent);
             outerGlow.setOutlineColor(sf::Color(0, 180, 255, 80));
             outerGlow.setOutlineThickness(5.f);
             window.draw(outerGlow);
-            
-            // Middle glow
-            sf::RectangleShape middleGlow({scaledWidth + 12.f, scaledHeight + 12.f});
-            middleGlow.setPosition({centeredX - 6.f, centeredY - 6.f});
-            middleGlow.setFillColor(sf::Color::Transparent);
-            middleGlow.setOutlineColor(sf::Color(0, 220, 255, 120));
-            middleGlow.setOutlineThickness(3.f);
-            window.draw(middleGlow);
-            
-            // Inner border (bright cyan)
+
             sf::RectangleShape innerBorder({scaledWidth + 4.f, scaledHeight + 4.f});
             innerBorder.setPosition({centeredX - 2.f, centeredY - 2.f});
             innerBorder.setFillColor(sf::Color::Transparent);
             innerBorder.setOutlineColor(sf::Color::Cyan);
             innerBorder.setOutlineThickness(2.f);
             window.draw(innerBorder);
-            
-            // Selection indicator above thumbnail
-            sf::CircleShape indicator(8.f);
-            indicator.setPosition({xPos + thumbWidth / 2.f - 8.f, yPos - 25.f});
-            indicator.setFillColor(sf::Color::Cyan);
-            window.draw(indicator);
-            
-            theme.thumbnail->setColor(sf::Color::White);
-        } else {
-            // Dimmed and slightly transparent for non-selected
-            theme.thumbnail->setColor(sf::Color(200, 200, 200, 120));
         }
-        
-        // Set sprite transform for animated scale
+
+        // Apply color + scale to the thumbnail sprite
         sf::Vector2f originalScale = theme.thumbnail->getScale();
-        theme.thumbnail->setScale({originalScale.x * currentScale, originalScale.y * currentScale});
+        theme.thumbnail->setScale({originalScale.x * currentScale,
+                                   originalScale.y * currentScale});
         theme.thumbnail->setPosition({centeredX, centeredY});
-        
-        // Draw the thumbnail
+
+        if (isSelected)
+            theme.thumbnail->setColor(sf::Color::White);
+        else
+            theme.thumbnail->setColor(sf::Color(200, 200, 200, 120));
+
         window.draw(*theme.thumbnail);
-        
-        // Reset scale for next frame
+
+        // Restore original scale for next frame
         theme.thumbnail->setScale(originalScale);
-        
-        // Filename below thumbnail with enhanced styling
+
+        // Name under each thumbnail
         sf::Text nameText(font_, theme.displayName, isSelected ? 22 : 16);
         if (isSelected) {
             nameText.setFillColor(sf::Color::Cyan);
@@ -412,10 +409,13 @@ void ThemeSelector::draw(sf::RenderWindow& window) {
         } else {
             nameText.setFillColor(sf::Color(160, 160, 160));
         }
+
         sf::FloatRect nameBounds = nameText.getLocalBounds();
-        nameText.setPosition({xPos + thumbWidth / 2.f - nameBounds.size.x / 2.f, yPos + THUMBNAIL_HEIGHT + 15.f});
+        nameText.setPosition({
+            xPos - nameBounds.size.x / 2.f,
+            yPos + thumbHeight / 2.f + 15.f
+        });
         window.draw(nameText);
-        }
     }
     
     // Instructions
