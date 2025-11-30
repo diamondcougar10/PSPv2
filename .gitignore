@@ -38,6 +38,12 @@ config/user_profile.json
 # Downloads folder (user-specific ROMs)
 Downloads/
 
+# Game files (ISOs, CSOs, etc.)
+Games/
+*.iso
+*.cso
+*.pbp
+
 # IDE
 .vscode/
 .vs/
