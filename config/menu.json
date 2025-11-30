@@ -1,116 +1,6 @@
 {
   "categories": [
     {
-      "id": "games",
-      "label": "Games",
-      "icon": "psp game.png",
-      "items": [
-        {
-          "label": "MotorStorm - Arctic Edge",
-          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
-          "type": "psp_iso"
-        }
-      ]
-    },
-    {
-      "id": "network",
-      "label": "Network",
-      "icon": "psp internet.png",
-      "items": [
-        {
-          "label": "Web Browser",
-          "path": "https://www.google.com",
-          "type": "web_url"
-        },
-        {
-          "label": "ROM Store",
-          "path": "https://romsfun.com/roms/playstation-portable/",
-          "type": "web_url"
-        },
-        {
-          "label": "YouTube",
-          "path": "https://www.youtube.com",
-          "type": "web_url"
-        },
-        {
-          "label": "Reddit",
-          "path": "https://www.reddit.com/r/PSP",
-          "type": "web_url"
-        }
-      ]
-    },
-    {
-      "id": "media",
-      "label": "Media",
-      "icon": "psp music.png",
-      "items": [
-        {
-          "label": "Music Player",
-          "path": "C:/Program Files/Windows Media Player/wmplayer.exe",
-          "type": "pc_app"
-        },
-        {
-          "label": "Photo Viewer",
-          "path": "explorer.exe shell:AppsFolder\\Microsoft.Windows.Photos_8wekyb3d8bbwe!App",
-          "type": "pc_app"
-        },
-        {
-          "label": "Video Player",
-          "path": "C:/Program Files/VideoLAN/VLC/vlc.exe",
-          "type": "pc_app"
-        }
-      ]
-    },
-    {
-      "id": "savedata",
-      "label": "Saved Data",
-      "icon": "psp savedata.png",
-      "items": [
-        {
-          "label": "Open Save Folder",
-          "path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SAVEDATA",
-          "type": "folder"
-        }
-      ]
-    },
-    {
-      "id": "tools",
-      "label": "Tools",
-      "icon": "psp memorystick.png",
-      "items": [
-        {
-          "label": "File Manager",
-          "path": "explorer.exe",
-          "type": "pc_app"
-        },
-        {
-          "label": "Notepad",
-          "path": "C:/Windows/system32/notepad.exe",
-          "type": "pc_app"
-        },
-        {
-          "label": "Calculator",
-          "path": "calc.exe",
-          "type": "pc_app"
-        },
-        {
-          "label": "Task Manager",
-          "path": "taskmgr.exe",
-          "type": "pc_app"
-        },
-        {
-          "label": "Command Prompt",
-          "path": "cmd.exe",
-          "type": "pc_app"
-        },
-        {
-          "label": "PowerShell",
-          "path": "powershell.exe",
-          "type": "pc_app"
-        }
-      ]
-    },
-    {
       "id": "settings",
       "label": "Settings",
       "icon": "Settings.png",
@@ -154,6 +44,163 @@
       ]
     },
     {
+      "id": "photos",
+      "label": "Photos",
+      "icon": "photo.png",
+      "items": [
+        {
+          "label": "Photo Viewer",
+          "path": "explorer.exe shell:AppsFolder\\Microsoft.Windows.Photos_8wekyb3d8bbwe!App",
+          "type": "pc_app",
+          "icon": "psp photo settings.png"
+        },
+        {
+          "label": "Pictures Folder",
+          "path": "shell:MyPictures",
+          "type": "folder",
+          "icon": "psp camera.png"
+        }
+      ]
+    },
+    {
+      "id": "music",
+      "label": "Music",
+      "icon": "psp music.png",
+      "items": [
+        {
+          "label": "Music Player",
+          "path": "C:/Program Files/Windows Media Player/wmplayer.exe",
+          "type": "pc_app",
+          "icon": "psp music.png"
+        },
+        {
+          "label": "Music Folder",
+          "path": "shell:MyMusic",
+          "type": "folder",
+          "icon": "psp radio.png"
+        }
+      ]
+    },
+    {
+      "id": "videos",
+      "label": "Videos",
+      "icon": "video.png",
+      "items": [
+        {
+          "label": "Video Player",
+          "path": "C:/Program Files/VideoLAN/VLC/vlc.exe",
+          "type": "pc_app",
+          "icon": "psp video setting.png"
+        },
+        {
+          "label": "Videos Folder",
+          "path": "shell:MyVideos",
+          "type": "folder",
+          "icon": "tv icon.png"
+        }
+      ]
+    },
+    {
+      "id": "games",
+      "label": "Games",
+      "icon": "psp game.png",
+      "items": [
+        {
+          "label": "MotorStorm - Arctic Edge",
+          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
+          "type": "psp_iso"
+        }
+      ]
+    },
+    {
+      "id": "network",
+      "label": "Network",
+      "icon": "psp internet.png",
+      "items": [
+        {
+          "label": "Web Browser",
+          "path": "https://www.google.com",
+          "type": "web_url",
+          "icon": "psp internet.png"
+        },
+        {
+          "label": "YouTube",
+          "path": "https://www.youtube.com",
+          "type": "web_url",
+          "icon": "psp RSS.png"
+        },
+        {
+          "label": "Reddit PSP",
+          "path": "https://www.reddit.com/r/PSP",
+          "type": "web_url",
+          "icon": "psp RSS setting.png"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "label": "PlayStation Store",
+      "icon": "psp network.png",
+      "items": [
+        {
+          "label": "ROM Store",
+          "path": "https://romsfun.com/roms/playstation-portable/",
+          "type": "web_url",
+          "icon": "psp network update.png"
+        },
+        {
+          "label": "Downloads Folder",
+          "path": "C:/Users/curph/source/repos/PSPV2/Downloads",
+          "type": "folder",
+          "icon": "psp memorystick.png"
+        }
+      ]
+    },
+    {
+      "id": "savedata",
+      "label": "Saved Data",
+      "icon": "psp savedata.png",
+      "items": [
+        {
+          "label": "Open Save Folder",
+          "path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SAVEDATA",
+          "type": "folder",
+          "icon": "psp savedata.png"
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "label": "Extras",
+      "icon": "psp memorystick.png",
+      "items": [
+        {
+          "label": "File Manager",
+          "path": "explorer.exe",
+          "type": "pc_app",
+          "icon": "psp memorystick.png"
+        },
+        {
+          "label": "Notepad",
+          "path": "C:/Windows/system32/notepad.exe",
+          "type": "pc_app",
+          "icon": "psp question.png"
+        },
+        {
+          "label": "Calculator",
+          "path": "calc.exe",
+          "type": "pc_app",
+          "icon": "psp system settings.png"
+        },
+        {
+          "label": "Task Manager",
+          "path": "taskmgr.exe",
+          "type": "pc_app",
+          "icon": "psp power settings.png"
+        }
+      ]
+    },
+    {
       "id": "exit",
       "label": "Exit",
       "icon": "white-power-button-hi.png",
@@ -161,7 +208,8 @@
         {
           "label": "Quit Application",
           "path": "exit",
-          "type": "exit_app"
+          "type": "exit_app",
+          "icon": "white-power-button-hi.png"
         }
       ]
     }
