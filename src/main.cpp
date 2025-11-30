@@ -8,9 +8,13 @@
 #include "UserProfile.hpp"
 #include "ThemeSelector.hpp"
 #include "UiSoundBank.hpp"
+#include "QuickMenu.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
+#include <windows.h>
+#include <psapi.h>
+#include <tlhelp32.h>
 
 using json = nlohmann::json;
 
@@ -80,30 +84,161 @@ int main() {
   Launcher launcher("config/settings.json");
   MenuItem pendingLaunchItem;
   ControllerSelectScreen::InputMethod selectedInputMethod;
+  
+  QuickMenu quickMenu(sounds);
 
   sf::Clock clock;
+  
+  // Function to check if PPSSPP is running
+  auto isPPSSPPRunning = []() -> bool {
+    DWORD processes[1024], needed, processCount;
+    if (!EnumProcesses(processes, sizeof(processes), &needed)) {
+      return false;
+    }
+    processCount = needed / sizeof(DWORD);
+    
+    for (unsigned int i = 0; i < processCount; i++) {
+      if (processes[i] != 0) {
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processes[i]);
+        if (hProcess) {
+          char processName[MAX_PATH] = {0};
+          HMODULE hMod;
+          DWORD cbNeeded;
+          
+          if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded)) {
+            GetModuleBaseNameA(hProcess, hMod, processName, sizeof(processName));
+            std::string name(processName);
+            if (name.find("PPSSPP") != std::string::npos) {
+              CloseHandle(hProcess);
+              return true;
+            }
+          }
+          CloseHandle(hProcess);
+        }
+      }
+    }
+    return false;
+  };
+  
+  // Function to find PPSSPP window handle
+  auto getPPSSPPWindow = []() -> HWND {
+    return FindWindowA(nullptr, "PPSSPP");
+  };
+  
+  // Function to pause PPSSPP by sending F12 key (default pause hotkey)
+  auto pausePPSSPP = [&getPPSSPPWindow]() -> void {
+    HWND ppssppWindow = getPPSSPPWindow();
+    if (ppssppWindow) {
+      // Send F12 key to pause (PPSSPP's default pause hotkey)
+      PostMessage(ppssppWindow, WM_KEYDOWN, VK_F12, 0);
+      PostMessage(ppssppWindow, WM_KEYUP, VK_F12, 0);
+    }
+  };
+  
+  // Function to unpause PPSSPP by sending F12 key again
+  auto unpausePPSSPP = [&getPPSSPPWindow]() -> void {
+    HWND ppssppWindow = getPPSSPPWindow();
+    if (ppssppWindow) {
+      // Send F12 key to unpause (toggle)
+      PostMessage(ppssppWindow, WM_KEYDOWN, VK_F12, 0);
+      PostMessage(ppssppWindow, WM_KEYUP, VK_F12, 0);
+    }
+  };
+  
+  // Function to terminate PPSSPP process
+  auto terminatePPSSPP = []() -> void {
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) return;
+    
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    
+    if (Process32First(hSnapshot, &pe32)) {
+      do {
+        std::string processName(pe32.szExeFile);
+        if (processName.find("PPSSPP") != std::string::npos) {
+          HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pe32.th32ProcessID);
+          if (hProcess) {
+            TerminateProcess(hProcess, 0);
+            CloseHandle(hProcess);
+          }
+        }
+      } while (Process32Next(hSnapshot, &pe32));
+    }
+    CloseHandle(hSnapshot);
+  };
 
   while (window.isOpen()) {
+    // Check if PPSSPP is running to disable input
+    bool ppssppActive = isPPSSPPRunning();
+    
     while (auto event = window.pollEvent()) {
       if (event->is<sf::Event::Closed>()) {
         window.close();
       }
-
-      if (state == AppState::Setup) {
-        setupScreen.handleEvent(*event);
-      } else if (state == AppState::Intro) {
-        intro.handleEvent(*event);
-      } else if (state == AppState::Menu) {
-        menu.handleEvent(*event);
-      } else if (state == AppState::ControllerSelect) {
-        controllerSelect.handleEvent(*event);
-      } else if (state == AppState::ThemeSelect) {
-        themeSelector.handleEvent(*event);
+      
+      // Always check for Touchpad button or F1 key to trigger quick menu during PPSSPP gameplay
+      if (ppssppActive && !quickMenu.isVisible()) {
+        // Check for Touchpad button (button 13 on PS5 controller) or F1 key
+        if (const auto* buttonPressed = event->getIf<sf::Event::JoystickButtonPressed>()) {
+          if (buttonPressed->button == 13) { // Touchpad button
+            sounds.playSystemOk();
+            pausePPSSPP(); // Pause the emulator
+            window.setVisible(true);
+            window.requestFocus();
+            quickMenu.show();
+          }
+        }
+        else if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
+          if (keyPressed->code == sf::Keyboard::Key::F1) {
+            sounds.playSystemOk();
+            pausePPSSPP(); // Pause the emulator
+            window.setVisible(true);
+            window.requestFocus();
+            quickMenu.show();
+          }
+        }
       }
-      // No input handling during GameStartup state
+      
+      // Handle quick menu input when visible
+      if (quickMenu.isVisible()) {
+        quickMenu.handleEvent(*event);
+      }
+      // Only process input if PPSSPP is not running and quick menu not visible
+      else if (!ppssppActive) {
+        if (state == AppState::Setup) {
+          setupScreen.handleEvent(*event);
+        } else if (state == AppState::Intro) {
+          intro.handleEvent(*event);
+        } else if (state == AppState::Menu) {
+          menu.handleEvent(*event);
+        } else if (state == AppState::ControllerSelect) {
+          controllerSelect.handleEvent(*event);
+        } else if (state == AppState::ThemeSelect) {
+          themeSelector.handleEvent(*event);
+        }
+        // No input handling during GameStartup state
+      }
     }
 
     float dt = clock.restart().asSeconds();
+    
+    // Handle quick menu choice
+    if (quickMenu.getChoice() == QuickMenu::Choice::ReturnToMenu) {
+      terminatePPSSPP();
+      quickMenu.reset();
+      window.setVisible(true);
+      window.requestFocus();
+      state = AppState::Menu;
+    }
+    else if (quickMenu.getChoice() == QuickMenu::Choice::ResumeGame) {
+      unpausePPSSPP(); // Unpause the emulator
+      quickMenu.reset();
+      window.setVisible(false);
+    }
+    
+    // Update quick menu
+    quickMenu.update(dt);
 
     if (state == AppState::Setup) {
       setupScreen.update(dt);
@@ -177,7 +312,16 @@ int main() {
       if (gameStartup.isFinished()) {
         // Launch the game after startup animation with selected input method
         bool useController = (selectedInputMethod == ControllerSelectScreen::InputMethod::PS5Controller);
+        
+        // Minimize the window before launching the game
+        window.setVisible(false);
+        
         launcher.launchItem(pendingLaunchItem, useController);
+        
+        // Restore window visibility after game closes
+        window.setVisible(true);
+        window.requestFocus();
+        
         state = AppState::Menu; // Return to menu
       }
     } else if (state == AppState::ThemeSelect) {
@@ -210,6 +354,12 @@ int main() {
       menu.draw(window); // Draw menu in background
       themeSelector.draw(window);
     }
+    
+    // Draw quick menu on top of everything if visible
+    if (quickMenu.isVisible()) {
+      quickMenu.draw(window);
+    }
+    
     window.display();
   }
 
