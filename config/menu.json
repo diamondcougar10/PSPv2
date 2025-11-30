@@ -104,13 +104,7 @@
       "id": "games",
       "label": "Games",
       "icon": "psp game.png",
-      "items": [
-        {
-          "label": "MotorStorm - Arctic Edge",
-          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
-          "type": "psp_iso"
-        }
-      ]
+      "items": []
     },
     {
       "id": "network",

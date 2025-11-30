@@ -71,8 +71,6 @@ void Launcher::launchItem(const MenuItem& item, bool useController) {
       std::cout << "Launching with Keyboard & Mouse\n";
     }
     
-    cmd += "\"";
-    
     std::cout << "Launching PPSSPP: " << cmd << "\n";
     int result = std::system(cmd.c_str());
     
