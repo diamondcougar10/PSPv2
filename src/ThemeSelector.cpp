@@ -134,25 +134,35 @@ void ThemeSelector::handleEvent(const sf::Event& event) {
     
     if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
         if (keyPressed->code == sf::Keyboard::Key::Left) {
-            if (selectedIndex_ > 0) {
-                selectedIndex_--;
+            if (!themes_.empty()) {
+                // Wrap around to end if at beginning
+                if (selectedIndex_ == 0) {
+                    selectedIndex_ = themes_.size() - 1;
+                } else {
+                    selectedIndex_--;
+                }
                 targetParallaxX_ += 8.f;
                 soundBank_.playCursor();
                 // Update camera to center selected item
                 const float thumbWidth = THUMBNAIL_WIDTH;
                 const float spacing = 30.f;
-                targetCameraOffsetX_ = -selectedIndex_ * (thumbWidth + spacing) + 640.f - thumbWidth / 2.f - 100.f;
+                targetCameraOffsetX_ = -selectedIndex_ * (thumbWidth + spacing);
                 updateLayout();
             }
         } else if (keyPressed->code == sf::Keyboard::Key::Right) {
-            if (selectedIndex_ < themes_.size() - 1) {
-                selectedIndex_++;
+            if (!themes_.empty()) {
+                // Wrap around to beginning if at end
+                if (selectedIndex_ >= themes_.size() - 1) {
+                    selectedIndex_ = 0;
+                } else {
+                    selectedIndex_++;
+                }
                 targetParallaxX_ -= 8.f;
                 soundBank_.playCursor();
                 // Update camera to center selected item
                 const float thumbWidth = THUMBNAIL_WIDTH;
                 const float spacing = 30.f;
-                targetCameraOffsetX_ = -selectedIndex_ * (thumbWidth + spacing) + 640.f - thumbWidth / 2.f - 100.f;
+                targetCameraOffsetX_ = -selectedIndex_ * (thumbWidth + spacing);
                 updateLayout();
             }
         } else if (keyPressed->code == sf::Keyboard::Key::Enter || keyPressed->code == sf::Keyboard::Key::Space) {
@@ -171,20 +181,34 @@ void ThemeSelector::handleEvent(const sf::Event& event) {
         
         if (joystickMoved->axis == sf::Joystick::Axis::X || joystickMoved->axis == sf::Joystick::Axis::PovX) {
             if (joystickMoved->position < -deadzone) {
-                // Left
-                if (selectedIndex_ > 0) {
-                    selectedIndex_--;
+                // Left - wrap around
+                if (!themes_.empty()) {
+                    if (selectedIndex_ == 0) {
+                        selectedIndex_ = themes_.size() - 1;
+                    } else {
+                        selectedIndex_--;
+                    }
                     targetParallaxX_ += 8.f;
                     soundBank_.playCursor();
-                    updateLayout(); // Only updates positions
+                    const float thumbWidth = THUMBNAIL_WIDTH;
+                    const float spacing = 30.f;
+                    targetCameraOffsetX_ = -selectedIndex_ * (thumbWidth + spacing);
+                    updateLayout();
                 }
             } else if (joystickMoved->position > deadzone) {
-                // Right
-                if (selectedIndex_ < themes_.size() - 1) {
-                    selectedIndex_++;
+                // Right - wrap around
+                if (!themes_.empty()) {
+                    if (selectedIndex_ >= themes_.size() - 1) {
+                        selectedIndex_ = 0;
+                    } else {
+                        selectedIndex_++;
+                    }
                     targetParallaxX_ -= 8.f;
                     soundBank_.playCursor();
-                    updateLayout(); // Only updates positions
+                    const float thumbWidth = THUMBNAIL_WIDTH;
+                    const float spacing = 30.f;
+                    targetCameraOffsetX_ = -selectedIndex_ * (thumbWidth + spacing);
+                    updateLayout();
                 }
             }
         }
@@ -287,21 +311,30 @@ void ThemeSelector::draw(sf::RenderWindow& window) {
         return;
     }
     
-    // Draw thumbnails with smooth scrolling
-    const float startX = 100.f;
+    // Draw thumbnails with infinite carousel effect
+    const float centerX = 640.f;
     const float startY = 250.f;
     const float spacing = 30.f;
     const float thumbWidth = THUMBNAIL_WIDTH;
+    const float itemWidth = thumbWidth + spacing;
     
-    for (size_t i = 0; i < themes_.size(); ++i) {
-        float xPos = startX + i * (thumbWidth + spacing) + cameraOffsetX_;
-        float yPos = startY;
-        
-        // Skip if off-screen for performance
-        if (xPos + thumbWidth < -100.f || xPos > 1380.f) continue;
-        
-        bool isSelected = (i == selectedIndex_);
-        auto& theme = themes_[i];
+    // Calculate how many clones we need to fill the screen on each side
+    const int clonesNeeded = 3; // Show 3 items on each side for smooth wraparound
+    
+    // Draw main items + clones before and after for seamless wrapping
+    for (int clone = -clonesNeeded; clone <= clonesNeeded; ++clone) {
+        for (size_t i = 0; i < themes_.size(); ++i) {
+            // Calculate position with wraparound offset
+            float baseX = centerX + (i * itemWidth) + cameraOffsetX_;
+            float xPos = baseX + (clone * themes_.size() * itemWidth);
+            float yPos = startY;
+            
+            // Skip if off-screen for performance
+            if (xPos + thumbWidth < -200.f || xPos > 1480.f) continue;
+            
+            // Check if THIS clone instance is the selected one (closest to center)
+            bool isSelected = (i == selectedIndex_) && (std::abs(xPos - centerX) < itemWidth / 2.f);
+            auto& theme = themes_[i];
         
         if (!theme.thumbnail) continue; // Safety check
         
@@ -382,6 +415,7 @@ void ThemeSelector::draw(sf::RenderWindow& window) {
         sf::FloatRect nameBounds = nameText.getLocalBounds();
         nameText.setPosition({xPos + thumbWidth / 2.f - nameBounds.size.x / 2.f, yPos + THUMBNAIL_HEIGHT + 15.f});
         window.draw(nameText);
+        }
     }
     
     // Instructions
