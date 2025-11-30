@@ -6,10 +6,12 @@ using json = nlohmann::json;
 
 UserProfile::UserProfile()
     : firstTimeSetup_(true)
-    , userName_("User")
+    , userName_("")
     , theme_("default")
     , showClock_(true)
-    , showDate_(true) {
+    , showDate_(true)
+    , use24HourFormat_(true)
+{
 }
 
 bool UserProfile::load(const std::string& profilePath) {
@@ -49,6 +51,7 @@ void UserProfile::save(const std::string& profilePath) {
     j["theme"] = theme_;
     j["show_clock"] = showClock_;
     j["show_date"] = showDate_;
+    j["use_24_hour_format"] = use24HourFormat_;
     
     std::ofstream ofs(profilePath);
     if (ofs) {

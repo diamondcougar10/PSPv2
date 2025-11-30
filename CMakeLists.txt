@@ -23,6 +23,7 @@ set(SOURCES
   src/ThemeSelector.cpp
   src/UiSoundBank.cpp
   src/QuickMenu.cpp
+  src/CustomThemeCreator.cpp
 )
 
 add_executable(PSPV2 ${SOURCES})

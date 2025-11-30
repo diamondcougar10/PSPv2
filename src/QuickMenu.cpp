@@ -122,14 +122,14 @@ void QuickMenu::handleEvent(const sf::Event& event) {
             static float lastYAxis = 0.f;
             float currentYAxis = axisMoved->position;
             
-            // Up movement (negative Y axis)
-            if (currentYAxis < -50.f && lastYAxis >= -50.f) {
+            // Up movement (positive Y axis - inverted)
+            if (currentYAxis > 50.f && lastYAxis <= 50.f) {
                 sounds_.playCursor();
                 selectedOption_ = (selectedOption_ == 0) ? 1 : 0;
                 selectionIndicator_.setPosition({410.f, selectedOption_ == 0 ? 335.f : 395.f});
             }
-            // Down movement (positive Y axis)
-            else if (currentYAxis > 50.f && lastYAxis <= 50.f) {
+            // Down movement (negative Y axis - inverted)
+            else if (currentYAxis < -50.f && lastYAxis >= -50.f) {
                 sounds_.playCursor();
                 selectedOption_ = (selectedOption_ == 1) ? 0 : 1;
                 selectionIndicator_.setPosition({410.f, selectedOption_ == 0 ? 335.f : 395.f});

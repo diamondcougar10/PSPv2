@@ -7,6 +7,7 @@
 #include "SetupScreen.hpp"
 #include "UserProfile.hpp"
 #include "ThemeSelector.hpp"
+#include "CustomThemeCreator.hpp"
 #include "UiSoundBank.hpp"
 #include "QuickMenu.hpp"
 #include <nlohmann/json.hpp>
@@ -24,7 +25,8 @@ enum class AppState {
     Menu,
     ControllerSelect,
     GameStartup,
-    ThemeSelect
+    ThemeSelect,
+    ThemeCreator
 };
 
 int main() {
@@ -79,6 +81,7 @@ int main() {
                                 "assets/Sounds/Program start.mp3");
   ControllerSelectScreen controllerSelect(sounds);
   ThemeSelector themeSelector(sounds, userProfile);
+  CustomThemeCreator themeCreator(sounds);
 
   Menu menu("config/menu.json", sounds, &userProfile);
   Launcher launcher("config/settings.json");
@@ -216,6 +219,8 @@ int main() {
           controllerSelect.handleEvent(*event);
         } else if (state == AppState::ThemeSelect) {
           themeSelector.handleEvent(*event);
+        } else if (state == AppState::ThemeCreator) {
+          themeCreator.handleEvent(*event);
         }
         // No input handling during GameStartup state
       }
@@ -277,6 +282,20 @@ int main() {
           themeSelector.reset();
           menu.resetLaunchRequest();
         }
+        // Check if user wants to create custom theme
+        else if (pendingLaunchItem.type == "theme_creator") {
+          sounds.playSystemOk();
+          state = AppState::ThemeCreator;
+          themeCreator.reset();
+          menu.resetLaunchRequest();
+        }
+        // Toggle time format setting
+        else if (pendingLaunchItem.type == "toggle_time_format") {
+          sounds.playSystemOk();
+          userProfile.setUse24HourFormat(!userProfile.getUse24HourFormat());
+          userProfile.save("config/user_profile.json");
+          menu.resetLaunchRequest();
+        }
         // Only show startup screen and controller select for PSP games
         else if (pendingLaunchItem.type == "psp_iso" || pendingLaunchItem.type == "psp_eboot") {
           sounds.playSystemOk(); // Play "OK" sound before controller select
@@ -336,6 +355,18 @@ int main() {
         }
         state = AppState::Menu;
       }
+    } else if (state == AppState::ThemeCreator) {
+      themeCreator.update(dt);
+      if (themeCreator.isFinished()) {
+        if (!themeCreator.wasCancelled()) {
+          // TODO: Apply created theme
+          auto theme = themeCreator.getCreatedTheme();
+          if (theme.has_value()) {
+            std::cout << "Custom theme created: " << theme->name << "\n";
+          }
+        }
+        state = AppState::Menu;
+      }
     }
 
     window.clear(sf::Color::Black);
@@ -353,6 +384,8 @@ int main() {
     } else if (state == AppState::ThemeSelect) {
       menu.draw(window); // Draw menu in background
       themeSelector.draw(window);
+    } else if (state == AppState::ThemeCreator) {
+      themeCreator.draw(window);
     }
     
     // Draw quick menu on top of everything if visible

@@ -36,6 +36,18 @@
           "icon": "psp theme settings.png"
         },
         {
+          "label": "Create Custom Theme",
+          "path": "theme_creator",
+          "type": "theme_creator",
+          "icon": "psp photo settings.png"
+        },
+        {
+          "label": "Time Format (24H/12H)",
+          "path": "toggle_time_format",
+          "type": "toggle_time_format",
+          "icon": "psp question.png"
+        },
+        {
           "label": "Factory Reset",
           "path": "factory_reset",
           "type": "factory_reset",

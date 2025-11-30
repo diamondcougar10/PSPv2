@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <filesystem>
+#include <algorithm>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -83,8 +84,13 @@ void Launcher::launchItem(const MenuItem& item, bool useController) {
     std::system(cmd.c_str());
   } else if (item.type == "folder") {
     // Open folder in Windows Explorer
-    std::string cmd = "explorer \"" + item.path + "\"";
-    std::cout << "Opening folder: " << item.path << "\n";
+    // Convert forward slashes to backslashes for Windows paths
+    std::string normalizedPath = item.path;
+    std::replace(normalizedPath.begin(), normalizedPath.end(), '/', '\\');
+    
+    // Use /select, flag for specific folders to ensure correct path
+    std::string cmd = "explorer \"" + normalizedPath + "\"";
+    std::cout << "Opening folder: " << normalizedPath << "\n";
     std::system(cmd.c_str());
   } else if (item.type == "web_url") {
     // Open URL in default browser

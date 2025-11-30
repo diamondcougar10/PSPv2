@@ -512,8 +512,8 @@ void Menu::handleEvent(const sf::Event& event) {
     
     // Vertical axis (D-pad up/down or left stick)
     if (joystickMoved->axis == sf::Joystick::Axis::Y || joystickMoved->axis == sf::Joystick::Axis::PovY) {
-      if (joystickMoved->position < -deadzone) {
-        // Up
+      if (joystickMoved->position > deadzone) {
+        // Up (inverted)
         if (!categories_.empty() && !categories_[currentCategoryIndex_].items.empty()) {
           if (currentItemIndex_ == 0) {
             currentItemIndex_ = categories_[currentCategoryIndex_].items.size() - 1;
@@ -523,8 +523,8 @@ void Menu::handleEvent(const sf::Event& event) {
           targetBgOffsetY_ += 5.f;
           soundBank_.playCursor();
         }
-      } else if (joystickMoved->position > deadzone) {
-        // Down
+      } else if (joystickMoved->position < -deadzone) {
+        // Down (inverted)
         if (!categories_.empty() && !categories_[currentCategoryIndex_].items.empty()) {
           currentItemIndex_ = (currentItemIndex_ + 1) % categories_[currentCategoryIndex_].items.size();
           targetBgOffsetY_ -= 5.f;
@@ -617,8 +617,18 @@ void Menu::draw(sf::RenderWindow& window) {
   
   // Show time if enabled
   if (userProfile_ && userProfile_->getShowClock()) {
-    dateTimeStream << std::setfill('0') << std::setw(2) << localTime->tm_hour << ":"
-                   << std::setfill('0') << std::setw(2) << localTime->tm_min;
+    if (userProfile_->getUse24HourFormat()) {
+      // 24-hour format
+      dateTimeStream << std::setfill('0') << std::setw(2) << localTime->tm_hour << ":"
+                     << std::setfill('0') << std::setw(2) << localTime->tm_min;
+    } else {
+      // 12-hour format with AM/PM
+      int hour12 = localTime->tm_hour % 12;
+      if (hour12 == 0) hour12 = 12; // Convert 0 to 12
+      dateTimeStream << hour12 << ":"
+                     << std::setfill('0') << std::setw(2) << localTime->tm_min << " "
+                     << (localTime->tm_hour < 12 ? "AM" : "PM");
+    }
   }
   
   // Battery icon (positioned before date/time to avoid overlap)
@@ -743,8 +753,12 @@ void Menu::draw(sf::RenderWindow& window) {
     itemTitleText.setPosition({infoPanelX, infoPanelY});
     window.draw(itemTitleText);
 
-    // Item type
-    sf::Text itemTypeText(font_, getItemTypeDisplay(selectedItem.type), 18);
+    // Item type - show current setting for toggle_time_format
+    std::string typeDisplay = getItemTypeDisplay(selectedItem.type);
+    if (selectedItem.type == "toggle_time_format" && userProfile_) {
+      typeDisplay = userProfile_->getUse24HourFormat() ? "Currently: 24-Hour" : "Currently: 12-Hour";
+    }
+    sf::Text itemTypeText(font_, typeDisplay, 18);
     itemTypeText.setFillColor(sf::Color(180, 180, 180));
     itemTypeText.setPosition({infoPanelX, infoPanelY + 40.f});
     window.draw(itemTypeText);
