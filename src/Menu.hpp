@@ -1,9 +1,11 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <string>
 #include <vector>
 #include <optional>
+#include <memory>
 
 class UiSoundBank;
 
@@ -14,6 +16,28 @@ struct MenuItem {
   std::string iconFilename;
   sf::Texture iconTex;
   std::optional<sf::Sprite> iconSprite;
+
+  // Preview fields
+  std::string previewImagePath; // Used for preview_card
+  std::string previewBgPath;
+  std::string coverArtPath;     // NEW: Big cover art
+  std::string previewAudioPath;
+
+  sf::Texture previewTexture;
+  std::optional<sf::Sprite> previewSprite;
+  bool hasPreview = false;
+
+  sf::Texture previewBgTexture;
+  std::optional<sf::Sprite> previewBgSprite;
+  bool hasPreviewBg = false;
+
+  sf::Texture coverArtTexture;
+  std::optional<sf::Sprite> coverArtSprite;
+  bool hasCoverArt = false;
+  
+  // Audio
+  std::shared_ptr<sf::SoundBuffer> previewBuffer;
+  bool hasPreviewAudio = false;
 };
 
 struct Category {
@@ -39,6 +63,7 @@ public:
   MenuItem getSelectedItem() const;
   void resetLaunchRequest() { launchRequested_ = false; }
   void reloadBackground();
+  void stopPreviewAudio() { if (previewSoundPlayer_) previewSoundPlayer_->stop(); }
 
 private:
   void loadFromFile(const std::string& configPath);
@@ -51,6 +76,8 @@ private:
   std::vector<Category> categories_;
   size_t currentCategoryIndex_{0};
   size_t currentItemIndex_{0};
+  size_t lastCategoryIndex_{static_cast<size_t>(-1)};
+  size_t lastItemIndex_{static_cast<size_t>(-1)};
   bool launchRequested_{false};
   std::string gamesRoot_;
 
@@ -62,6 +89,7 @@ private:
   float bgOffsetY_{0.f};
   float targetBgOffsetX_{0.f};
   float targetBgOffsetY_{0.f};
+  float previewAlpha_{0.f};
 
   // Rendering
   sf::Font font_;
@@ -72,6 +100,7 @@ private:
 
   // Audio
   UiSoundBank& soundBank_;
+  std::optional<sf::Sound> previewSoundPlayer_;
 
   // User profile
   UserProfile* userProfile_;

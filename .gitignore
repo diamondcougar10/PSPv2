@@ -51,3 +51,10 @@ Games/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated Assets
+assets/previews/
+
+# Temporary files
+ffmpeg.zip
+ffmpeg_temp/

@@ -24,6 +24,8 @@ set(SOURCES
   src/UiSoundBank.cpp
   src/QuickMenu.cpp
   src/CustomThemeCreator.cpp
+  src/GameMetadataExtractor.cpp
+  src/RomAssetManager.cpp
 )
 
 add_executable(PSPV2 ${SOURCES})

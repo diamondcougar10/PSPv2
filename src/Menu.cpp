@@ -1,6 +1,7 @@
 #include "Menu.hpp"
 #include "UserProfile.hpp"
 #include "UiSoundBank.hpp"
+#include "RomAssetManager.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
@@ -10,6 +11,7 @@
 #include <sstream>
 #include <algorithm>
 #include <windows.h>
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -85,6 +87,16 @@ void Menu::loadFromFile(const std::string& configPath) {
           item.path = itemJson.value("path", std::string(""));
           item.type = itemJson.value("type", std::string("pc_app"));
           item.iconFilename = itemJson.value("icon", std::string(""));
+          
+          // Preview fields
+          item.previewImagePath = itemJson.value("preview_image", std::string(""));
+          if (item.previewImagePath.empty()) {
+              item.previewImagePath = itemJson.value("preview_card", std::string(""));
+          }
+          item.coverArtPath = itemJson.value("cover_art", std::string(""));
+          item.previewBgPath = itemJson.value("preview_bg", std::string(""));
+          item.previewAudioPath = itemJson.value("preview_audio", std::string(""));
+
           cat.items.push_back(item);
         }
       }
@@ -126,6 +138,53 @@ void Menu::loadAssets() {
           std::cout << "Loaded icon: " << itemIconPath << " for item " << item.label << "\n";
         } catch (const std::exception& e) {
           std::cerr << "Warning: failed to load item icon " << itemIconPath << ": " << e.what() << "\n";
+        }
+      }
+
+      // Load preview image
+      if (!item.previewImagePath.empty()) {
+        if (item.previewTexture.loadFromFile(item.previewImagePath)) {
+            item.previewSprite.emplace(item.previewTexture);
+            item.hasPreview = true;
+            std::cout << "Loaded preview: " << item.previewImagePath << "\n";
+        } else {
+            std::cerr << "Warning: failed to load preview " << item.previewImagePath << "\n";
+        }
+      }
+
+      // Load preview background
+      if (!item.previewBgPath.empty()) {
+        if (item.previewBgTexture.loadFromFile(item.previewBgPath)) {
+            item.previewBgTexture.setSmooth(true);
+            item.previewBgSprite.emplace(item.previewBgTexture);
+            item.hasPreviewBg = true;
+            std::cout << "Loaded preview bg: " << item.previewBgPath << "\n";
+        } else {
+            std::cerr << "Warning: failed to load preview bg " << item.previewBgPath << "\n";
+        }
+      }
+
+      // Load cover art
+      if (!item.coverArtPath.empty()) {
+        if (item.coverArtTexture.loadFromFile(item.coverArtPath)) {
+            item.coverArtTexture.setSmooth(true);
+            item.coverArtSprite.emplace(item.coverArtTexture);
+            item.hasCoverArt = true;
+            std::cout << "Loaded cover art: " << item.coverArtPath << "\n";
+        } else {
+            std::cerr << "Warning: failed to load cover art " << item.coverArtPath << "\n";
+        }
+      }
+
+      // Load preview audio
+      if (!item.previewAudioPath.empty()) {
+        item.previewBuffer = std::make_shared<sf::SoundBuffer>();
+        if (item.previewBuffer->loadFromFile(item.previewAudioPath)) {
+            item.hasPreviewAudio = true;
+            std::cout << "Loaded preview audio: " << item.previewAudioPath << "\n";
+        } else {
+            std::cerr << "Warning: failed to load preview audio " << item.previewAudioPath << "\n";
+            item.previewBuffer.reset();
         }
       }
     }
@@ -248,17 +307,22 @@ void Menu::scanRomsFolder() {
         // Clean up display name - remove extension first
         std::string displayName = filename.substr(0, filename.find_last_of('.'));
         
+        // Replace separators with spaces
+        size_t pos;
+        while ((pos = displayName.find(" - ")) != std::string::npos) {
+            displayName.replace(pos, 3, " ");
+        }
+        std::replace(displayName.begin(), displayName.end(), '_', ' ');
+        
         // Remove common ROM tags and region codes
         std::vector<std::string> tagsToRemove = {
           "(USA)", "(Europe)", "(Japan)", "(Asia)", "(World)", 
           "(En,Fr,De,Es,It)", "(En)", "(NTSC)", "(PAL)",
           "[USA]", "[Europe]", "[Japan]", "[Asia]", "[World]",
-          "[!]", "[a]", "[b]", "[t]", "[f]", "[h]", "[o]",
-          " - ", "_", "  "
+          "[!]", "[a]", "[b]", "[t]", "[f]", "[h]", "[o]"
         };
         
         for (const auto& tag : tagsToRemove) {
-          size_t pos;
           while ((pos = displayName.find(tag)) != std::string::npos) {
             displayName.erase(pos, tag.length());
           }
@@ -292,21 +356,13 @@ void Menu::scanRomsFolder() {
         displayName.erase(displayName.find_last_not_of(" \t") + 1);
         
         // Remove multiple consecutive spaces
-        size_t pos;
         while ((pos = displayName.find("  ")) != std::string::npos) {
           displayName.replace(pos, 2, " ");
         }
         
-        // Add to menu with cleaned name
-        MenuItem item;
-        item.label = displayName.empty() ? filename : displayName;
-        item.path = gamesPath + "/" + filename;
-        item.type = hasExtension(lower, ".pbp") ? "psp_eboot" : "psp_iso";
-        item.iconFilename = "psp UMD.png";
-        
-        categories_[gamesIdx].items.push_back(item);
+        // We used to add to menu here, but now we let the second pass handle it
+        // so that metadata extraction logic is centralized.
         romsFound++;
-        std::cout << "Added to menu as: " << item.label << "\n";
       } else {
         std::cerr << "Failed to move: " << filename << "\n";
       }
@@ -349,6 +405,14 @@ void Menu::scanRomsFolder() {
         // Clean up display name
         std::string displayName = filename.substr(0, filename.find_last_of('.'));
         
+        // Replace separators with spaces
+        size_t pos;
+        while ((pos = displayName.find(" - ")) != std::string::npos) {
+            displayName.replace(pos, 3, " ");
+        }
+        std::replace(displayName.begin(), displayName.end(), '_', ' ');
+        std::replace(displayName.begin(), displayName.end(), '-', ' ');
+
         // Remove region tags and language codes
         std::vector<std::string> tagsToRemove = {
           "(USA)", "(Europe)", "(Japan)", "(Asia)", "(World)", 
@@ -358,7 +422,6 @@ void Menu::scanRomsFolder() {
         };
         
         for (const auto& tag : tagsToRemove) {
-          size_t pos;
           while ((pos = displayName.find(tag)) != std::string::npos) {
             displayName.erase(pos, tag.length());
           }
@@ -393,7 +456,6 @@ void Menu::scanRomsFolder() {
         displayName.erase(displayName.find_last_not_of(" \t") + 1);
         
         // Remove multiple consecutive spaces
-        size_t pos;
         while ((pos = displayName.find("  ")) != std::string::npos) {
           displayName.replace(pos, 2, " ");
         }
@@ -404,6 +466,64 @@ void Menu::scanRomsFolder() {
         item.path = filename;  // Just filename, launcher will prepend gamesRoot
         item.type = hasExtension(lower, ".pbp") ? "psp_eboot" : "psp_iso";
         item.iconFilename = "psp UMD.png";
+
+        // Extract metadata from ROM
+        std::string fullPath = gamesPath + "\\" + filename;
+        try {
+            // Ensure assets/previews exists
+            std::filesystem::create_directories("assets/previews");
+            CachedAssets assets = RomAssetManager::getOrExtractAssets(fullPath, "assets/previews");
+            
+            std::cout << "[Menu] Assets for " << filename << ": " << assets.iconPath << "\n";
+
+            if (!assets.title.empty()) {
+                item.label = assets.title;
+            }
+            
+            if (!assets.iconPath.empty()) {
+                item.previewImagePath = assets.iconPath;
+                
+                // Load for list icon
+                if (item.iconTex.loadFromFile(assets.iconPath)) {
+                    item.iconSprite.emplace(item.iconTex);
+                    sf::Vector2u size = item.iconTex.getSize();
+                    item.iconSprite->setOrigin({size.x / 2.f, size.y / 2.f});
+                    item.iconSprite->setScale({0.5f, 0.5f});
+                }
+
+                // Load for preview card
+                if (item.previewTexture.loadFromFile(assets.iconPath)) {
+                    item.previewSprite.emplace(item.previewTexture);
+                    item.hasPreview = true;
+                }
+            }
+            
+            if (!assets.backgroundPath.empty()) {
+                item.previewBgPath = assets.backgroundPath;
+                item.coverArtPath = assets.backgroundPath;
+
+                if (item.previewBgTexture.loadFromFile(assets.backgroundPath)) {
+                    item.previewBgTexture.setSmooth(true);
+                    item.previewBgSprite.emplace(item.previewBgTexture);
+                    item.hasPreviewBg = true;
+                }
+                
+                if (item.coverArtTexture.loadFromFile(assets.backgroundPath)) {
+                    item.coverArtTexture.setSmooth(true);
+                    item.coverArtSprite.emplace(item.coverArtTexture);
+                    item.hasCoverArt = true;
+                }
+            }
+            
+            if (!assets.audioPath.empty()) {
+                item.previewAudioPath = assets.audioPath;
+            }
+
+            std::cout << "Processed assets for " << filename << "\n";
+
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to extract metadata for " << filename << ": " << e.what() << "\n";
+        }
         
         categories_[gamesIdx].items.push_back(item);
         existingRoms++;
@@ -536,6 +656,32 @@ void Menu::handleEvent(const sf::Event& event) {
 }
 
 void Menu::update(float dt) {
+  // Check for selection change to update preview audio
+  if (currentCategoryIndex_ != lastCategoryIndex_ || currentItemIndex_ != lastItemIndex_) {
+    lastCategoryIndex_ = currentCategoryIndex_;
+    lastItemIndex_ = currentItemIndex_;
+    
+    // Stop previous sound
+    if (previewSoundPlayer_) previewSoundPlayer_->stop();
+    
+    // Play new sound if available
+    if (!categories_.empty() && !categories_[currentCategoryIndex_].items.empty()) {
+        const auto& item = categories_[currentCategoryIndex_].items[currentItemIndex_];
+        if (item.hasPreviewAudio && item.previewBuffer) {
+            previewSoundPlayer_.emplace(*item.previewBuffer);
+            previewSoundPlayer_->setLooping(true);
+            previewSoundPlayer_->play();
+        }
+    }
+    
+    // Reset preview alpha on selection change
+    previewAlpha_ = 0.f;
+  }
+  
+  // Update preview alpha
+  previewAlpha_ += 600.f * dt; // Fast fade in
+  if (previewAlpha_ > 255.f) previewAlpha_ = 255.f;
+
   // Smooth scroll animation for item list
   const float lerpSpeed = 8.0f;
   targetItemListOffset_ = -static_cast<float>(currentItemIndex_) * ITEM_ROW_HEIGHT;
@@ -663,6 +809,105 @@ void Menu::draw(sf::RenderWindow& window) {
     return;
   }
 
+  // Draw preview background and elements (behind UI)
+  {
+      const auto& currentCat = categories_[currentCategoryIndex_];
+      if (!currentCat.items.empty()) {
+          const auto& selectedItem = currentCat.items[currentItemIndex_];
+          
+          if (selectedItem.type == "psp_iso" || selectedItem.type == "psp_eboot") {
+              // 1) Background wallpaper (Fullscreen - Cover Mode)
+              if (selectedItem.hasPreviewBg && selectedItem.previewBgSprite) {
+                  sf::Sprite bg = *selectedItem.previewBgSprite;
+                  
+                  sf::Vector2u windowSize = window.getSize();
+                  auto texSize = selectedItem.previewBgTexture.getSize();
+                  
+                  // Calculate scale to COVER the screen (max of X and Y scales)
+                  // This ensures the image fills the entire screen without distortion
+                  float scaleX = static_cast<float>(windowSize.x) / texSize.x;
+                  float scaleY = static_cast<float>(windowSize.y) / texSize.y;
+                  float scale = std::max(scaleX, scaleY);
+                  
+                  bg.setScale({scale, scale});
+                  
+                  // Center the sprite perfectly
+                  bg.setOrigin({texSize.x / 2.f, texSize.y / 2.f});
+                  bg.setPosition({windowSize.x / 2.f, windowSize.y / 2.f});
+                  
+                  bg.setColor(sf::Color(255, 255, 255, static_cast<std::uint8_t>(std::min(255.f, previewAlpha_))));
+                  window.draw(bg);
+              }
+
+              // 2) Preview “video window”
+              if (selectedItem.hasPreview) {
+                  sf::Sprite preview = *selectedItem.previewSprite;
+
+                  float targetW = 320.f;
+                  float targetH = 180.f;
+                  auto texSize = selectedItem.previewTexture.getSize();
+                  float scaleX = targetW / texSize.x;
+                  float scaleY = targetH / texSize.y;
+                  float scale  = std::min(scaleX, scaleY);
+                  preview.setScale({scale, scale});
+
+                  // Move to top-right area
+                  float px = 880.f; 
+                  float py = 80.f;
+                  preview.setPosition({px, py});
+                  
+                  sf::Color fadeColor(255, 255, 255, static_cast<std::uint8_t>(previewAlpha_));
+                  preview.setColor(fadeColor);
+
+                  // subtle drop shadow
+                  sf::RectangleShape shadow({targetW + 12.f, targetH + 12.f});
+                  shadow.setPosition({px - 6.f + 4.f, py - 6.f + 4.f});
+                  shadow.setFillColor(sf::Color(0, 0, 0, static_cast<std::uint8_t>(std::min(150.f, previewAlpha_))));
+                  window.draw(shadow);
+
+                  // white border
+                  sf::RectangleShape frame({targetW + 8.f, targetH + 8.f});
+                  frame.setPosition({px - 4.f, py - 4.f});
+                  frame.setFillColor(sf::Color(230, 230, 230, static_cast<std::uint8_t>(std::min(230.f, previewAlpha_))));
+                  window.draw(frame);
+
+                  window.draw(preview);
+              }
+
+              // 3) Big cover art
+              if (selectedItem.hasCoverArt) {
+                  sf::Sprite cover = *selectedItem.coverArtSprite;
+
+                  float targetW = 200.f; // Slightly smaller to fit better
+                  float targetH = 320.f;
+                  auto texSize = selectedItem.coverArtTexture.getSize();
+                  float scaleX = targetW / texSize.x;
+                  float scaleY = targetH / texSize.y;
+                  float scale  = std::min(scaleX, scaleY);
+                  cover.setScale({scale, scale});
+
+                  // Position below the video preview
+                  float cx = 940.f; 
+                  float cy = 300.f; 
+                  cover.setPosition({cx, cy});
+                  
+                  sf::Color fadeColor(255, 255, 255, static_cast<std::uint8_t>(previewAlpha_));
+                  cover.setColor(fadeColor);
+
+                  // small glow
+                  sf::RectangleShape glow({targetW + 20.f, targetH + 20.f});
+                  glow.setPosition({cx - 10.f, cy - 10.f});
+                  glow.setFillColor(sf::Color::Transparent);
+                  glow.setOutlineColor(sf::Color(0, 220, 255, static_cast<std::uint8_t>(std::min(100.f, previewAlpha_))));
+                  glow.setOutlineThickness(4.f);
+                  window.draw(glow);
+
+                  window.draw(cover);
+              }
+          }
+      }
+  }
+
   // 3. Category icons
   for (size_t i = 0; i < categories_.size(); ++i) {
     auto& cat = categories_[i];
@@ -746,6 +991,12 @@ void Menu::draw(sf::RenderWindow& window) {
     
     float infoPanelX = 820.f;
     float infoPanelY = ITEM_LIST_START_Y;
+
+    // Move text below images for games
+    if (selectedItem.type == "psp_iso" || selectedItem.type == "psp_eboot") {
+        infoPanelX = 880.f;
+        infoPanelY = 640.f;
+    }
 
     // Selected item label
     sf::Text itemTitleText(font_, selectedItem.label, 28);

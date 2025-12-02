@@ -263,12 +263,14 @@ int main() {
         
         // Check if user wants to exit
         if (pendingLaunchItem.type == "exit_app") {
+          menu.stopPreviewAudio();
           sounds.playSystemOk();
           window.close();
           menu.resetLaunchRequest();
         }
         // Check if user wants factory reset
         else if (pendingLaunchItem.type == "factory_reset") {
+          menu.stopPreviewAudio();
           sounds.playSystemOk();
           userProfile.factoryReset();
           userProfile.save("config/user_profile.json");
@@ -277,6 +279,7 @@ int main() {
         }
         // Check if user wants to change theme
         else if (pendingLaunchItem.type == "theme_select") {
+          menu.stopPreviewAudio();
           sounds.playSystemOk();
           state = AppState::ThemeSelect;
           themeSelector.reset();
@@ -284,6 +287,7 @@ int main() {
         }
         // Check if user wants to create custom theme
         else if (pendingLaunchItem.type == "theme_creator") {
+          menu.stopPreviewAudio();
           sounds.playSystemOk();
           state = AppState::ThemeCreator;
           themeCreator.reset();
@@ -298,6 +302,7 @@ int main() {
         }
         // Only show startup screen and controller select for PSP games
         else if (pendingLaunchItem.type == "psp_iso" || pendingLaunchItem.type == "psp_eboot") {
+          menu.stopPreviewAudio();
           sounds.playSystemOk(); // Play "OK" sound before controller select
           
           // Transition to ControllerSelect state
@@ -307,6 +312,7 @@ int main() {
         }
         // For everything else, launch directly
         else {
+          menu.stopPreviewAudio();
           sounds.playSystemOk();
           launcher.launchItem(pendingLaunchItem, false);
           menu.resetLaunchRequest();
