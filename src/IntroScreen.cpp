@@ -75,9 +75,9 @@ bool IntroScreen::tryStartVideo() {
     }
 
     // 3. Open Video Pipe
-    // -vf scale=640:360,fps=30: Downscale to 360p and force 30fps for performance
+    // -vf scale=1280:720,fps=30: Native 720p at 30fps
     // -f image2pipe -vcodec rawvideo -pix_fmt rgba outputs raw pixels
-    std::string cmd = "ffmpeg -i \"" + videoPath + "\" -vf scale=640:360,fps=30 -f image2pipe -vcodec rawvideo -pix_fmt rgba -loglevel quiet -";
+    std::string cmd = "ffmpeg -i \"" + videoPath + "\" -vf scale=1280:720,fps=30 -f image2pipe -vcodec rawvideo -pix_fmt rgba -loglevel quiet -";
     ffmpegPipe_ = POPEN(cmd.c_str(), "rb");
 
     if (!ffmpegPipe_) {
@@ -85,16 +85,17 @@ bool IntroScreen::tryStartVideo() {
         return false;
     }
 
-    // Prepare texture (640x360)
-    if (!videoTexture_.resize({640, 360})) {
+    // Prepare texture (1280x720)
+    if (!videoTexture_.resize({1280, 720})) {
          std::cerr << "IntroScreen: Failed to create video texture.\n";
          return false;
     }
+    videoTexture_.setSmooth(false);
     videoSprite_.emplace(videoTexture_);
-    videoSprite_->setScale({2.0f, 2.0f}); // Scale up to 1280x720
+    videoSprite_->setScale({1.0f, 1.0f}); // Native scale
     
-    // Buffer for 640x360 RGBA
-    frameBuffer_.resize(640 * 360 * 4);
+    // Buffer for 1280x720 RGBA
+    frameBuffer_.resize(1280 * 720 * 4);
 
     return true;
 }
