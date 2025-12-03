@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <windows.h>
 #include <filesystem>
+#include <cstdint>
 
 using json = nlohmann::json;
 
@@ -217,9 +218,27 @@ void Menu::scanRomsFolder() {
     return filename.compare(filename.length() - ext.length(), ext.length(), ext) == 0;
   };
   
+  // Resolve Games path (check current, then parents)
+  std::string gamesPath = gamesRoot_;
+  if (!std::filesystem::exists(gamesPath)) {
+      // Try going up levels
+      std::vector<std::string> tryPaths = {
+          "../" + gamesRoot_,
+          "../../" + gamesRoot_,
+          "../../../" + gamesRoot_
+      };
+      
+      for (const auto& p : tryPaths) {
+          if (std::filesystem::exists(p)) {
+              gamesPath = p;
+              std::cout << "Found Games folder at: " << gamesPath << "\n";
+              break;
+          }
+      }
+  }
+  
   // Scan Downloads folder for PSP ROMs
   std::string downloadPath = "Downloads";
-  std::string gamesPath = gamesRoot_;  // Use configured games root path
   std::string searchPath = downloadPath + "/*.*";
   
   WIN32_FIND_DATAA findData;
@@ -687,6 +706,21 @@ void Menu::update(float dt) {
   targetItemListOffset_ = -static_cast<float>(currentItemIndex_) * ITEM_ROW_HEIGHT;
   itemListOffset_ += (targetItemListOffset_ - itemListOffset_) * lerpSpeed * dt;
 
+  // Category scroll animation (Parallax/Carousel)
+  targetCategoryScrollOffset_ = static_cast<float>(currentCategoryIndex_);
+  
+  // Handle wrap-around smoothing
+  // If we are far apart (more than half the list), we might want to snap or handle it differently.
+  // For now, simple lerp. To fix the "long scroll" on wrap, we'd need virtual indices.
+  // A simple fix for visual comfort: if distance is large, snap immediately or increase speed.
+  float diff = targetCategoryScrollOffset_ - categoryScrollOffset_;
+  if (std::abs(diff) > categories_.size() / 2.0f) {
+      // We wrapped around. Snap to target to avoid dizzying scroll.
+      categoryScrollOffset_ = targetCategoryScrollOffset_;
+  } else {
+      categoryScrollOffset_ += (targetCategoryScrollOffset_ - categoryScrollOffset_) * lerpSpeed * dt;
+  }
+
   // Category scale animation (subtle pulse on selected)
   categoryScaleAnim_ += dt * 2.0f;
 
@@ -710,12 +744,15 @@ void Menu::update(float dt) {
 sf::Vector2f Menu::getCategoryIconPosition(size_t index) const {
   if (categories_.empty()) return {0.f, 0.f};
 
-  const float totalWidth = 1280.f;
-  const float spacing = 120.f;
-  const float totalCatWidth = categories_.size() * spacing;
-  const float startX = (totalWidth - totalCatWidth) / 2.f + spacing / 2.f;
-
-  return {startX + index * spacing, CATEGORY_Y_POS};
+  // Parallax/Carousel positioning
+  // Center the selected category (defined by categoryScrollOffset_)
+  const float centerX = 1280.f / 2.f;
+  
+  // Calculate position relative to the scroll offset
+  // We use the interpolated categoryScrollOffset_ for smooth movement
+  float x = centerX + (static_cast<float>(index) - categoryScrollOffset_) * CATEGORY_SPACING;
+  
+  return {x, CATEGORY_Y_POS};
 }
 
 std::string Menu::getItemTypeDisplay(const std::string& type) const {
@@ -908,16 +945,26 @@ void Menu::draw(sf::RenderWindow& window) {
       }
   }
 
-  // 3. Category icons
+  // 3. Category icons (Parallax Scroll)
   for (size_t i = 0; i < categories_.size(); ++i) {
     auto& cat = categories_[i];
     sf::Vector2f pos = getCategoryIconPosition(i);
 
+    // Skip if off-screen to save performance
+    if (pos.x < -100.f || pos.x > 1380.f) continue;
+
+    // Calculate distance from center for parallax scaling
+    float dist = std::abs(pos.x - 640.f);
+    float scaleRatio = std::max(0.f, 1.f - (dist / 600.f)); // 0 to 1 based on proximity to center
+    
+    // Smooth easing for scale ratio
+    scaleRatio = scaleRatio * scaleRatio * (3.f - 2.f * scaleRatio);
+
     bool isSelected = (i == currentCategoryIndex_);
     
     if (cat.iconSprite.has_value()) {
-      float scale = isSelected ? (CATEGORY_ICON_SIZE_SELECTED / cat.iconTex.getSize().x) 
-                               : (CATEGORY_ICON_SIZE / cat.iconTex.getSize().x);
+      float targetSize = CATEGORY_ICON_SIZE + (CATEGORY_ICON_SIZE_SELECTED - CATEGORY_ICON_SIZE) * scaleRatio;
+      float scale = targetSize / cat.iconTex.getSize().x;
       
       // Add subtle pulse to selected
       if (isSelected) {
@@ -926,16 +973,33 @@ void Menu::draw(sf::RenderWindow& window) {
 
       cat.iconSprite->setPosition(pos);
       cat.iconSprite->setScale({scale, scale});
+      
+      // Fade out distant icons
+      sf::Color iconColor = sf::Color::White;
+      iconColor.a = static_cast<std::uint8_t>(50 + 205 * scaleRatio);
+      cat.iconSprite->setColor(iconColor);
+      
       window.draw(*cat.iconSprite);
     }
 
     // Category label
-    sf::Text catLabel(font_, cat.label, isSelected ? 20 : 16);
-    catLabel.setFillColor(isSelected ? sf::Color::White : sf::Color(180, 180, 180));
-    sf::FloatRect bounds = catLabel.getLocalBounds();
-    catLabel.setOrigin({bounds.size.x / 2.f, 0.f});
-    catLabel.setPosition({pos.x, pos.y + (isSelected ? 50.f : 40.f)});
-    window.draw(catLabel);
+    // Only show label if it's close to center or selected
+    if (scaleRatio > 0.5f) {
+        sf::Text catLabel(font_, cat.label, static_cast<unsigned int>(16 + 8 * scaleRatio));
+        
+        sf::Color labelColor = isSelected ? sf::Color::White : sf::Color(180, 180, 180);
+        labelColor.a = static_cast<std::uint8_t>(255 * scaleRatio);
+        catLabel.setFillColor(labelColor);
+        
+        sf::FloatRect bounds = catLabel.getLocalBounds();
+        catLabel.setOrigin({bounds.size.x / 2.f, 0.f});
+        
+        // Position label below icon, adjusting for icon size
+        float yOffset = (CATEGORY_ICON_SIZE + (CATEGORY_ICON_SIZE_SELECTED - CATEGORY_ICON_SIZE) * scaleRatio) / 2.f;
+        catLabel.setPosition({pos.x, pos.y + yOffset + 20.f});
+        
+        window.draw(catLabel);
+    }
   }
 
   // 4. Item list for current category

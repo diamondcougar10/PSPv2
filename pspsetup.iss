@@ -38,6 +38,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Main Executable
 Source: "dist\PSPV2\PSPV2.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\PSPV2\HOW_TO_ADD_GAMES.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 ; DLLs and FFmpeg
 Source: "dist\PSPV2\*.dll"; DestDir: "{app}"; Flags: ignoreversion

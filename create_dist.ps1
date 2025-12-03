@@ -29,6 +29,10 @@ Copy-Item -Path "assets" -Destination $targetDir -Recurse
 Write-Host "Copying Config..."
 Copy-Item -Path "config" -Destination $targetDir -Recurse
 
+# Copy Instructions
+Write-Host "Copying Instructions..."
+Copy-Item -Path "HOW_TO_ADD_GAMES.txt" -Destination $targetDir
+
 # Reset user_profile.json for distribution (Clean Install)
 Write-Host "Resetting user profile for distribution..."
 $defaultProfile = @{

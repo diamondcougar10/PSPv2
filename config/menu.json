@@ -213,6 +213,37 @@
       ]
     },
     {
+      "id": "help",
+      "label": "Help & Support",
+      "icon": "psp question.png",
+      "items": [
+        {
+          "label": "Game Install Guide",
+          "path": "HOW_TO_ADD_GAMES.txt",
+          "type": "web_url",
+          "icon": "psp usb.png"
+        },
+        {
+          "label": "Controls Guide",
+          "path": "CONTROLS.txt",
+          "type": "web_url",
+          "icon": "psp system settings.png"
+        },
+        {
+          "label": "Contact Support",
+          "path": "mailto:userhelppspv@gmail.com",
+          "type": "web_url",
+          "icon": "psp network settings.png"
+        },
+        {
+          "label": "Open Help Folder",
+          "path": ".",
+          "type": "folder",
+          "icon": "psp memorystick.png"
+        }
+      ]
+    },
+    {
       "id": "exit",
       "label": "Exit",
       "icon": "white-power-button-hi.png",

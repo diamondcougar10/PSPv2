@@ -93,9 +93,27 @@ void Launcher::launchItem(const MenuItem& item, bool useController) {
     std::cout << "Opening folder: " << normalizedPath << "\n";
     std::system(cmd.c_str());
   } else if (item.type == "web_url") {
-    // Open URL in default browser
-    std::string cmd = "start \"\" \"" + item.path + "\"";
-    std::cout << "Opening URL: " << item.path << "\n";
+    // Open URL in default browser or file in default app
+    std::string path = item.path;
+    
+    // Check if it's a URL
+    bool isUrl = (path.find("http://") == 0 || path.find("https://") == 0 || path.find("mailto:") == 0 || path.find("www.") == 0);
+    
+    if (!isUrl) {
+        // It's likely a local file. Check if it exists.
+        if (fs::exists(path)) {
+            path = fs::absolute(path).string();
+        } else {
+            // Try checking in the current directory explicitly if not found
+            fs::path currentPath = fs::current_path() / path;
+            if (fs::exists(currentPath)) {
+                path = currentPath.string();
+            }
+        }
+    }
+
+    std::string cmd = "start \"\" \"" + path + "\"";
+    std::cout << "Opening: " << path << "\n";
     std::system(cmd.c_str());
   } else {
     std::cerr << "Unknown item type: " << item.type << "\n";

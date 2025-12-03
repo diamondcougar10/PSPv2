@@ -1,0 +1,36 @@
+================================================================================
+                  CONTROLS.txt - PSPV2 Control Guide
+================================================================================
+
+--------------------------------------------------------------------------------
+KEYBOARD CONTROLS
+--------------------------------------------------------------------------------
+Navigation:
+  Arrow Keys   : Move Cursor (Up, Down, Left, Right)
+  Enter        : Select / Launch
+  Escape       : Go Back / Exit
+
+In-Game (PPSSPP Default):
+  Arrow Keys   : D-Pad
+  I, K, J, L   : Triangle, Cross, Square, Circle
+  A, S         : Left Trigger, Right Trigger
+  Space        : Start
+  V            : Select
+
+--------------------------------------------------------------------------------
+CONTROLLER CONTROLS (PS4/PS5/Xbox)
+--------------------------------------------------------------------------------
+Navigation:
+  D-Pad        : Move Cursor
+  Left Stick   : Move Cursor
+  Cross (A)    : Select / Launch
+  Circle (B)   : Go Back
+
+In-Game:
+  Standard PSP layout mapping.
+
+--------------------------------------------------------------------------------
+SHORTCUTS
+--------------------------------------------------------------------------------
+  Alt + Enter  : Toggle Fullscreen (in Emulator)
+  F12          : Take Screenshot (in Emulator)

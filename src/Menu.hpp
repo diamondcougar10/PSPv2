@@ -85,6 +85,8 @@ private:
   float itemListOffset_{0.f};
   float targetItemListOffset_{0.f};
   float categoryScaleAnim_{1.0f};
+  float categoryScrollOffset_{0.f};       // NEW: Current scroll position (float index)
+  float targetCategoryScrollOffset_{0.f}; // NEW: Target scroll position (index)
   float bgOffsetX_{0.f};
   float bgOffsetY_{0.f};
   float targetBgOffsetX_{0.f};
@@ -106,8 +108,9 @@ private:
   UserProfile* userProfile_;
 
   // Constants
-  static constexpr float CATEGORY_ICON_SIZE = 64.f;
-  static constexpr float CATEGORY_ICON_SIZE_SELECTED = 80.f;
+  static constexpr float CATEGORY_ICON_SIZE = 80.f;          // Increased from 64
+  static constexpr float CATEGORY_ICON_SIZE_SELECTED = 160.f; // Increased from 80 (Zoomed in!)
+  static constexpr float CATEGORY_SPACING = 200.f;            // New spacing constant
   static constexpr float CATEGORY_Y_POS = 200.f;
   static constexpr float ITEM_LIST_START_Y = 350.f;
   static constexpr float ITEM_ROW_HEIGHT = 40.f;
