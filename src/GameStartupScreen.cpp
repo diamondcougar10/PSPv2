@@ -6,6 +6,7 @@ GameStartupScreen::GameStartupScreen(const std::string& imagePath,
     // Load startup image/GIF
     try {
         imageTex_ = sf::Texture(imagePath);
+        imageTex_.setSmooth(true); // Enable smoothing
         imageSprite_.emplace(imageTex_);
         
         // Center image on screen
@@ -13,6 +14,12 @@ GameStartupScreen::GameStartupScreen(const std::string& imagePath,
         imageSprite_->setOrigin({imageSize.x / 2.f, imageSize.y / 2.f});
         imageSprite_->setPosition({640.f, 360.f}); // Center of 1280x720
         
+        // Scale to fill screen
+        float scaleX = 1280.f / imageSize.x;
+        float scaleY = 720.f / imageSize.y;
+        float scale = std::max(scaleX, scaleY); // Aspect Fill
+        imageSprite_->setScale({scale, scale});
+
         // Start fully transparent
         imageSprite_->setColor(sf::Color(255, 255, 255, 0));
         

@@ -27,6 +27,7 @@ IntroScreen::IntroScreen(UiSoundBank& sounds,
     // Always load standard logo intro assets (for fallback or sequence)
     try {
         logoTex_ = sf::Texture(logoPath);
+        logoTex_.setSmooth(true); // Enable smoothing for fullscreen scaling
         logoSprite_.emplace(logoTex_);
         
         // Center logo on screen
@@ -34,6 +35,12 @@ IntroScreen::IntroScreen(UiSoundBank& sounds,
         logoSprite_->setOrigin({logoSize.x / 2.f, logoSize.y / 2.f});
         logoSprite_->setPosition({640.f, 360.f}); // Center of 1280x720
         
+        // Scale to fill screen
+        float scaleX = 1280.f / logoSize.x;
+        float scaleY = 720.f / logoSize.y;
+        float scale = std::max(scaleX, scaleY); // Aspect Fill
+        logoSprite_->setScale({scale, scale});
+
         // Start at low opacity to fade in quickly
         logoSprite_->setColor(sf::Color(255, 255, 255, 50));
         

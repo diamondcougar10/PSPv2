@@ -120,6 +120,7 @@ void Menu::loadAssets() {
     std::string iconPath = "assets/Icons/" + cat.iconFilename;
     try {
       cat.iconTex = sf::Texture(iconPath);
+      cat.iconTex.setSmooth(true); // Enable smooth filtering for zoomed icons
       cat.iconSprite = sf::Sprite(cat.iconTex);
       // Center origin for scaling
       sf::Vector2u size = cat.iconTex.getSize();
@@ -135,6 +136,7 @@ void Menu::loadAssets() {
         std::string itemIconPath = "assets/Icons/" + item.iconFilename;
         try {
           item.iconTex = sf::Texture(itemIconPath);
+          item.iconTex.setSmooth(true); // Enable smooth filtering
           item.iconSprite = sf::Sprite(item.iconTex);
           std::cout << "Loaded icon: " << itemIconPath << " for item " << item.label << "\n";
         } catch (const std::exception& e) {
@@ -504,6 +506,7 @@ void Menu::scanRomsFolder() {
                 
                 // Load for list icon
                 if (item.iconTex.loadFromFile(assets.iconPath)) {
+                    item.iconTex.setSmooth(true); // Enable smoothing
                     item.iconSprite.emplace(item.iconTex);
                     sf::Vector2u size = item.iconTex.getSize();
                     item.iconSprite->setOrigin({size.x / 2.f, size.y / 2.f});
@@ -512,6 +515,7 @@ void Menu::scanRomsFolder() {
 
                 // Load for preview card
                 if (item.previewTexture.loadFromFile(assets.iconPath)) {
+                    item.previewTexture.setSmooth(true); // Enable smoothing
                     item.previewSprite.emplace(item.previewTexture);
                     item.hasPreview = true;
                 }
