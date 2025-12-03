@@ -1,0 +1,51 @@
+================================================================================
+                  HOW_TO_ADD_GAMES.txt - PSPV2 Game Installation
+================================================================================
+
+Welcome to PSPV2! Here is how to add your PSP games to the dashboard.
+
+--------------------------------------------------------------------------------
+STEP 1: GET YOUR GAME FILES
+--------------------------------------------------------------------------------
+You need valid PSP game files to play (.ISO or .CSO).
+
+We have made this easy for you!
+1. In the PSPV2 app, scroll to the "PlayStation Store" icon (Network icon).
+2. Select "ROM Store". This will open a safe website to download games.
+3. Download the game files (usually .zip or .7z) to the "Downloads" folder inside the app.
+   (You can open this folder easily by selecting "Downloads Folder" in the app).
+
+Note: The app will automatically extract and install games found in the "Downloads" folder!
+
+--------------------------------------------------------------------------------
+STEP 2: LOCATE THE GAMES FOLDER
+--------------------------------------------------------------------------------
+1. Open the folder where you installed PSPV2.
+   (Default is usually C:\Program Files (x86)\PSPV2)
+   
+2. Look for a folder named "Games".
+
+--------------------------------------------------------------------------------
+STEP 3: COPY YOUR GAMES
+--------------------------------------------------------------------------------
+1. Drag and drop your .ISO or .CSO files directly into the "Games" folder.
+
+   Example:
+   PSPV2\Games\GodOfWar.iso
+   PSPV2\Games\Tekken.cso
+
+--------------------------------------------------------------------------------
+STEP 4: PLAY!
+--------------------------------------------------------------------------------
+1. Run PSPV2.exe.
+2. Scroll to the "Game" icon (the controller icon).
+3. Scroll down - your new games will appear in the list automatically.
+4. Press "X" (or Enter) to play!
+
+--------------------------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+- If your game doesn't show up, make sure it is a valid .ISO or .CSO file.
+- Ensure the file is inside the "Games" folder, not a subfolder inside it.
+- You can also place games in the "Downloads" folder, and the app will 
+  automatically find them and move them to the Games folder for you.
