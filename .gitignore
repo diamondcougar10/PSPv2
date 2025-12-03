@@ -58,3 +58,6 @@ assets/previews/
 # Temporary files
 ffmpeg.zip
 ffmpeg_temp/
+
+dist/
+assets/Sounds/intro_audio.wav

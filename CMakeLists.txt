@@ -26,6 +26,7 @@ set(SOURCES
   src/CustomThemeCreator.cpp
   src/GameMetadataExtractor.cpp
   src/RomAssetManager.cpp
+  src/AboutScreen.cpp
 )
 
 add_executable(PSPV2 ${SOURCES})

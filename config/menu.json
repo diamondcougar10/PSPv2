@@ -7,7 +7,7 @@
       "items": [
         {
           "label": "PPSSPP Settings",
-          "path": "C:/Program Files/PPSSPP/PPSSPPWindows64.exe",
+          "path": "Apps/PPSSPP/PPSSPPWindows64.exe",
           "type": "pc_app",
           "icon": "psp game.png"
         },
@@ -52,6 +52,12 @@
           "path": "factory_reset",
           "type": "factory_reset",
           "icon": "psp update.png"
+        },
+        {
+          "label": "About",
+          "path": "about",
+          "type": "about",
+          "icon": "psp question.png"
         }
       ]
     },
@@ -100,7 +106,7 @@
       "items": [
         {
           "label": "Video Player",
-          "path": "C:/Program Files/VideoLAN/VLC/vlc.exe",
+          "path": "Apps/VLC/vlc.exe",
           "type": "pc_app",
           "icon": "psp video setting.png"
         },
@@ -156,7 +162,7 @@
         },
         {
           "label": "Downloads Folder",
-          "path": "C:/Users/curph/source/repos/PSPV2/Downloads",
+          "path": "Downloads",
           "type": "folder",
           "icon": "psp memorystick.png"
         }
@@ -169,7 +175,7 @@
       "items": [
         {
           "label": "Open Save Folder",
-          "path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SAVEDATA",
+          "path": "SavedData",
           "type": "folder",
           "icon": "psp savedata.png"
         }

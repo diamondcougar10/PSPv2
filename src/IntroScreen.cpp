@@ -3,11 +3,28 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <filesystem>
+
+// Windows specific for _popen
+#ifdef _WIN32
+    #define POPEN _popen
+    #define PCLOSE _pclose
+#else
+    #define POPEN popen
+    #define PCLOSE pclose
+#endif
 
 IntroScreen::IntroScreen(UiSoundBank& sounds,
                          const std::string& logoPath)
     : soundBank_(sounds) {
-    // Load PSP logo
+    
+    // Try to start video first
+    if (tryStartVideo()) {
+        isVideoMode_ = true;
+        std::cout << "IntroScreen: Starting video intro mode.\n";
+    }
+
+    // Always load standard logo intro assets (for fallback or sequence)
     try {
         logoTex_ = sf::Texture(logoPath);
         logoSprite_.emplace(logoTex_);
@@ -31,19 +48,92 @@ IntroScreen::IntroScreen(UiSoundBank& sounds,
     blackBg_.setPosition({0.f, 0.f});
 }
 
+IntroScreen::~IntroScreen() {
+    stopVideo();
+}
+
+bool IntroScreen::tryStartVideo() {
+    const std::string videoPath = "assets/intro/CurpheyMade.mp4";
+    const std::string audioPath = "assets/Sounds/intro_audio.wav";
+
+    if (!std::filesystem::exists(videoPath)) {
+        std::cerr << "IntroScreen: Video not found at " << videoPath << "\n";
+        return false;
+    }
+
+    // 1. Extract Audio if needed (or always to be safe)
+    // We use ffmpeg to extract audio to a temp wav file
+    // -y overwrites, -vn no video, -acodec pcm_s16le (wav standard)
+    std::string audioCmd = "ffmpeg -i \"" + videoPath + "\" -vn -acodec pcm_s16le -ar 44100 -ac 2 \"" + audioPath + "\" -y -loglevel quiet";
+    system(audioCmd.c_str());
+
+    // 2. Load Audio
+    if (videoAudio_.openFromFile(audioPath)) {
+        videoAudio_.play();
+    } else {
+        std::cerr << "IntroScreen: Failed to load extracted audio.\n";
+    }
+
+    // 3. Open Video Pipe
+    // -vf scale=640:360,fps=30: Downscale to 360p and force 30fps for performance
+    // -f image2pipe -vcodec rawvideo -pix_fmt rgba outputs raw pixels
+    std::string cmd = "ffmpeg -i \"" + videoPath + "\" -vf scale=640:360,fps=30 -f image2pipe -vcodec rawvideo -pix_fmt rgba -loglevel quiet -";
+    ffmpegPipe_ = POPEN(cmd.c_str(), "rb");
+
+    if (!ffmpegPipe_) {
+        std::cerr << "IntroScreen: Failed to open ffmpeg pipe.\n";
+        return false;
+    }
+
+    // Prepare texture (640x360)
+    if (!videoTexture_.resize({640, 360})) {
+         std::cerr << "IntroScreen: Failed to create video texture.\n";
+         return false;
+    }
+    videoSprite_.emplace(videoTexture_);
+    videoSprite_->setScale({2.0f, 2.0f}); // Scale up to 1280x720
+    
+    // Buffer for 640x360 RGBA
+    frameBuffer_.resize(640 * 360 * 4);
+
+    return true;
+}
+
+void IntroScreen::stopVideo() {
+    if (ffmpegPipe_) {
+        PCLOSE(ffmpegPipe_);
+        ffmpegPipe_ = nullptr;
+    }
+    videoAudio_.stop();
+}
+
 void IntroScreen::handleEvent(const sf::Event& event) {
     if (auto* keyPressed = event.getIf<sf::Event::KeyPressed>()) {
         // Allow skipping with Enter, Space, or Escape
         if (keyPressed->code == sf::Keyboard::Key::Enter ||
             keyPressed->code == sf::Keyboard::Key::Space ||
             keyPressed->code == sf::Keyboard::Key::Escape) {
-            finished_ = true;
+            
+            if (isVideoMode_) {
+                // Skip video, go to logo
+                stopVideo();
+                isVideoMode_ = false;
+                time_ = 0.f;
+            } else {
+                // Skip logo, finish intro
+                finished_ = true;
+            }
         }
     }
 }
 
 void IntroScreen::update(float dt) {
     if (finished_) return;
+
+    if (isVideoMode_) {
+        updateVideo(dt);
+        return;
+    }
 
     // Play opening sound once
     if (!soundStarted_) {
@@ -85,11 +175,40 @@ void IntroScreen::update(float dt) {
 }
 
 void IntroScreen::draw(sf::RenderWindow& window) {
+    if (isVideoMode_ && videoSprite_) {
+        window.draw(*videoSprite_);
+        return;
+    }
+
     // Draw black background
     window.draw(blackBg_);
 
     // Draw fading PSP logo
     if (logoSprite_) {
         window.draw(*logoSprite_);
+    }
+}
+
+void IntroScreen::updateVideo(float dt) {
+    if (!ffmpegPipe_) return;
+
+    videoTimer_ += dt;
+    const float frameDuration = 1.0f / 30.0f; // Target 30 FPS
+
+    if (videoTimer_ >= frameDuration) {
+        videoTimer_ -= frameDuration;
+
+        // Read one frame from the pipe
+        size_t read = fread(frameBuffer_.data(), 1, frameBuffer_.size(), ffmpegPipe_);
+        
+        if (read == frameBuffer_.size()) {
+            videoTexture_.update(frameBuffer_.data());
+        } else {
+            // End of stream or error
+            std::cout << "IntroScreen: Video finished. Switching to PSP Logo.\n";
+            stopVideo();
+            isVideoMode_ = false;
+            time_ = 0.f;
+        }
     }
 }

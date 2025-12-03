@@ -8,6 +8,7 @@
 #include "UserProfile.hpp"
 #include "ThemeSelector.hpp"
 #include "CustomThemeCreator.hpp"
+#include "AboutScreen.hpp"
 #include "UiSoundBank.hpp"
 #include "QuickMenu.hpp"
 #include <nlohmann/json.hpp>
@@ -26,7 +27,8 @@ enum class AppState {
     ControllerSelect,
     GameStartup,
     ThemeSelect,
-    ThemeCreator
+    ThemeCreator,
+    About
 };
 
 int main() {
@@ -82,6 +84,7 @@ int main() {
   ControllerSelectScreen controllerSelect(sounds);
   ThemeSelector themeSelector(sounds, userProfile);
   CustomThemeCreator themeCreator(sounds);
+  AboutScreen aboutScreen(sounds);
 
   Menu menu("config/menu.json", sounds, &userProfile);
   Launcher launcher("config/settings.json");
@@ -221,6 +224,8 @@ int main() {
           themeSelector.handleEvent(*event);
         } else if (state == AppState::ThemeCreator) {
           themeCreator.handleEvent(*event);
+        } else if (state == AppState::About) {
+          aboutScreen.handleEvent(*event);
         }
         // No input handling during GameStartup state
       }
@@ -300,6 +305,14 @@ int main() {
           userProfile.save("config/user_profile.json");
           menu.resetLaunchRequest();
         }
+        // Check if user wants to see About screen
+        else if (pendingLaunchItem.type == "about") {
+          menu.stopPreviewAudio();
+          sounds.playSystemOk();
+          state = AppState::About;
+          aboutScreen.reset();
+          menu.resetLaunchRequest();
+        }
         // Only show startup screen and controller select for PSP games
         else if (pendingLaunchItem.type == "psp_iso" || pendingLaunchItem.type == "psp_eboot") {
           menu.stopPreviewAudio();
@@ -373,6 +386,11 @@ int main() {
         }
         state = AppState::Menu;
       }
+    } else if (state == AppState::About) {
+      aboutScreen.update(dt);
+      if (aboutScreen.isFinished()) {
+        state = AppState::Menu;
+      }
     }
 
     window.clear(sf::Color::Black);
@@ -392,6 +410,9 @@ int main() {
       themeSelector.draw(window);
     } else if (state == AppState::ThemeCreator) {
       themeCreator.draw(window);
+    } else if (state == AppState::About) {
+      menu.draw(window); // Draw menu in background
+      aboutScreen.draw(window);
     }
     
     // Draw quick menu on top of everything if visible
