@@ -41,7 +41,7 @@ $defaultProfile = @{
     "show_date" = $true
     "theme" = "Background.png"
     "use_24_hour_format" = $true
-    "user_name" = "User"
+    "user_name" = ""
 }
 $defaultProfile | ConvertTo-Json | Set-Content "$targetDir\config\user_profile.json"
 

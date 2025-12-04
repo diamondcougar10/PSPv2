@@ -64,13 +64,8 @@ int main() {
   UserProfile userProfile;
   bool profileLoaded = userProfile.load("config/user_profile.json");
   
-  AppState state;
-  // Only show setup if profile doesn't exist OR username is empty/default
-  if (!profileLoaded || (userProfile.isFirstTimeSetup() && userProfile.getUserName().empty())) {
-    state = AppState::Setup;
-  } else {
-    state = AppState::Intro;
-  }
+  // Always play Intro first
+  AppState state = AppState::Intro;
 
   // Load PSP-style UI sounds
   UiSoundBank sounds;
@@ -183,9 +178,9 @@ int main() {
         window.close();
       }
       
-      // Always check for Touchpad button or F1 key to trigger quick menu during PPSSPP gameplay
+      // Always check for Touchpad button or Escape key to trigger quick menu during PPSSPP gameplay
       if (ppssppActive && !quickMenu.isVisible()) {
-        // Check for Touchpad button (button 13 on PS5 controller) or F1 key
+        // Check for Touchpad button (button 13 on PS5 controller) or Escape key
         if (const auto* buttonPressed = event->getIf<sf::Event::JoystickButtonPressed>()) {
           if (buttonPressed->button == 13) { // Touchpad button
             sounds.playSystemOk();
@@ -196,7 +191,7 @@ int main() {
           }
         }
         else if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-          if (keyPressed->code == sf::Keyboard::Key::F1) {
+          if (keyPressed->code == sf::Keyboard::Key::Escape) {
             sounds.playSystemOk();
             pausePPSSPP(); // Pause the emulator
             window.setVisible(true);
@@ -254,12 +249,17 @@ int main() {
       setupScreen.update(dt);
       if (setupScreen.isFinished()) {
         userProfile.save("config/user_profile.json");
-        state = AppState::Intro;
+        state = AppState::Menu;
       }
     } else if (state == AppState::Intro) {
       intro.update(dt);
       if (intro.isFinished()) {
-        state = AppState::Menu;
+        // Check if we need to run setup
+        if (userProfile.isFirstTimeSetup()) {
+            state = AppState::Setup;
+        } else {
+            state = AppState::Menu;
+        }
       }
     } else if (state == AppState::Menu) {
       menu.update(dt);

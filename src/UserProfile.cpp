@@ -1,8 +1,25 @@
 #include "UserProfile.hpp"
 #include <fstream>
 #include <iostream>
+#include <filesystem>
+#include <shlobj.h> // For SHGetKnownFolderPath
 
 using json = nlohmann::json;
+
+// Helper to get the AppData/Roaming/PSPV2/config path
+std::filesystem::path getConfigPath() {
+    PWSTR path = NULL;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &path))) {
+        std::filesystem::path appDataPath(path);
+        CoTaskMemFree(path);
+        
+        std::filesystem::path configDir = appDataPath / "PSPV2" / "config";
+        std::filesystem::create_directories(configDir);
+        return configDir / "user_profile.json";
+    }
+    // Fallback to local config if AppData fails
+    return "config/user_profile.json";
+}
 
 UserProfile::UserProfile()
     : firstTimeSetup_(true)
@@ -15,7 +32,11 @@ UserProfile::UserProfile()
 }
 
 bool UserProfile::load(const std::string& profilePath) {
-    std::ifstream ifs(profilePath);
+    // Ignore the passed profilePath and use AppData
+    std::filesystem::path configPath = getConfigPath();
+    std::cout << "Loading profile from: " << configPath << "\n";
+    
+    std::ifstream ifs(configPath);
     if (!ifs) {
         std::cout << "No profile found, starting first-time setup\n";
         return false;
@@ -30,11 +51,7 @@ bool UserProfile::load(const std::string& profilePath) {
         theme_ = j.value("theme", std::string("default"));
         showClock_ = j.value("show_clock", true);
         showDate_ = j.value("show_date", true);
-        
-        // If we have a valid username saved, mark setup as complete
-        if (!userName_.empty() && userName_ != "User") {
-            firstTimeSetup_ = false;
-        }
+        use24HourFormat_ = j.value("use_24_hour_format", true);
         
         std::cout << "Profile loaded: Welcome back, " << userName_ << "!\n";
         return true;
@@ -45,6 +62,10 @@ bool UserProfile::load(const std::string& profilePath) {
 }
 
 void UserProfile::save(const std::string& profilePath) {
+    // Ignore the passed profilePath and use AppData
+    std::filesystem::path configPath = getConfigPath();
+    std::cout << "Saving profile to: " << configPath << "\n";
+
     json j;
     j["first_time_setup"] = firstTimeSetup_;
     j["user_name"] = userName_;
@@ -53,12 +74,12 @@ void UserProfile::save(const std::string& profilePath) {
     j["show_date"] = showDate_;
     j["use_24_hour_format"] = use24HourFormat_;
     
-    std::ofstream ofs(profilePath);
+    std::ofstream ofs(configPath);
     if (ofs) {
         ofs << j.dump(2); // Pretty print with 2 space indent
         std::cout << "Profile saved successfully\n";
         std::cout << "Profile saved for " << userName_ << "\n";
     } else {
-        std::cerr << "Failed to save profile\n";
+        std::cerr << "Failed to save profile to " << configPath << "\n";
     }
 }

@@ -79,7 +79,7 @@ void QuickMenu::handleEvent(const sf::Event& event) {
             choice_ = (selectedOption_ == 0) ? Choice::ResumeGame : Choice::ReturnToMenu;
             visible_ = false;
         }
-        else if (keyPressed->code == sf::Keyboard::Key::Escape || keyPressed->code == sf::Keyboard::Key::F1) {
+        else if (keyPressed->code == sf::Keyboard::Key::Escape) {
             sounds_.playCancel();
             choice_ = Choice::ResumeGame;
             visible_ = false;

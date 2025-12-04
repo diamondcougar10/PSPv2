@@ -13,6 +13,7 @@
 #include <windows.h>
 #include <filesystem>
 #include <cstdint>
+#include <shlobj.h> // For SHGetKnownFolderPath
 
 using json = nlohmann::json;
 
@@ -221,8 +222,8 @@ void Menu::scanRomsFolder() {
   };
   
   // Resolve Games path (check current, then parents)
-  std::string gamesPath = gamesRoot_;
-  if (!std::filesystem::exists(gamesPath)) {
+  std::string gamesPathStr = gamesRoot_;
+  if (!std::filesystem::exists(gamesPathStr)) {
       // Try going up levels
       std::vector<std::string> tryPaths = {
           "../" + gamesRoot_,
@@ -232,169 +233,126 @@ void Menu::scanRomsFolder() {
       
       for (const auto& p : tryPaths) {
           if (std::filesystem::exists(p)) {
-              gamesPath = p;
-              std::cout << "Found Games folder at: " << gamesPath << "\n";
+              gamesPathStr = p;
+              std::cout << "Found Games folder at: " << gamesPathStr << "\n";
               break;
           }
       }
   }
   
-  // Scan Downloads folder for PSP ROMs
-  std::string downloadPath = "Downloads";
-  std::string searchPath = downloadPath + "/*.*";
+  // Ensure we have an absolute path for Games to avoid ambiguity
+  std::filesystem::path gamesPath = std::filesystem::absolute(gamesPathStr);
   
-  WIN32_FIND_DATAA findData;
-  HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
-  
-  if (hFind == INVALID_HANDLE_VALUE) {
-    std::cout << "No files in Downloads folder\n";
-    return;
+  // Use the user's actual Downloads folder
+  PWSTR downloadsPathStr = NULL;
+  std::filesystem::path downloadPath;
+  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, 0, NULL, &downloadsPathStr))) {
+      downloadPath = std::filesystem::path(downloadsPathStr);
+      CoTaskMemFree(downloadsPathStr);
+      std::cout << "Scanning User Downloads: " << downloadPath << "\n";
+  } else {
+      downloadPath = std::filesystem::absolute("Downloads"); // Fallback
+      std::cout << "Scanning Local Downloads: " << downloadPath << "\n";
   }
-  
-  // Find the Games category
+
+  // Find the Games category index first
   size_t gamesIdx = 0;
+  bool gamesCategoryFound = false;
   for (size_t i = 0; i < categories_.size(); ++i) {
     if (categories_[i].id == "games") {
       gamesIdx = i;
+      gamesCategoryFound = true;
       break;
     }
   }
+
+  if (!gamesCategoryFound) {
+      std::cerr << "Error: 'games' category not found in menu configuration.\n";
+      return;
+  }
+
+  int romsFound = 0;
+  WIN32_FIND_DATAA findData;
   
-  // First pass: Extract any zip files
-  std::vector<std::string> zipFiles;
-  do {
-    std::string filename = findData.cFileName;
-    if (filename == "." || filename == "..") continue;
-    
-    std::string lower = filename;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    
-    if (hasExtension(lower, ".zip")) {
-      zipFiles.push_back(filename);
-    }
-  } while (FindNextFileA(hFind, &findData) != 0);
-  FindClose(hFind);
+  // Scan Downloads folder for PSP ROMs
+  std::string searchPath = downloadPath.string() + "/*.*";
+  HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
   
-  // Extract zip files using PowerShell
-  for (const auto& zipFile : zipFiles) {
-    std::string zipPath = downloadPath + "\\" + zipFile;
-    std::string extractPath = downloadPath;
-    
-    std::cout << "Extracting: " << zipFile << "...\n";
-    
-    // Use PowerShell Expand-Archive to extract
-    std::string cmd = "powershell -Command \"Expand-Archive -Path '" + zipPath + 
-                     "' -DestinationPath '" + extractPath + "' -Force\"";
-    int result = std::system(cmd.c_str());
-    
-    if (result == 0) {
-      std::cout << "Extracted successfully: " << zipFile << "\n";
-      
-      // Delete the zip file after extraction
-      std::string deleteCmd = "del /Q \"" + zipPath + "\"";
-      std::system(deleteCmd.c_str());
-      std::cout << "Deleted zip file: " << zipFile << "\n";
-    } else {
-      std::cerr << "Failed to extract: " << zipFile << "\n";
-    }
+  if (hFind != INVALID_HANDLE_VALUE) {
+      // First pass: Move ROM files from Downloads to Games folder
+      do {
+        std::string filename = findData.cFileName;
+        if (filename == "." || filename == "..") continue;
+        
+        std::string lower = filename;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        
+        bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
+        
+        // Also check for ZIP files to extract
+        bool isZip = hasExtension(lower, ".zip") || hasExtension(lower, ".7z") || hasExtension(lower, ".rar");
+        
+        if (isZip) {
+             // Simple check if the zip name contains "PSP" or "ISO" to avoid extracting random zips
+             // This is a safety heuristic
+             if (lower.find("psp") != std::string::npos || lower.find("iso") != std::string::npos || lower.find("game") != std::string::npos) {
+                 std::cout << "Found potential game archive: " << filename << "\n";
+                 std::filesystem::path sourcePath = downloadPath / filename;
+                 
+                 std::string cmd;
+                 if (hasExtension(lower, ".zip")) {
+                     // Use PowerShell for .zip files (built-in on Windows)
+                     // We use single quotes for paths to handle spaces
+                     cmd = "powershell -command \"Expand-Archive -Path '" + sourcePath.string() + "' -DestinationPath '" + gamesPath.string() + "' -Force\"";
+                 } else {
+                     // Try 7z for others (requires 7-Zip installed)
+                     cmd = "7z x \"" + sourcePath.string() + "\" -o\"" + gamesPath.string() + "\" -y";
+                 }
+
+                 std::cout << "Extracting: " << cmd << "\n";
+                 int result = system(cmd.c_str());
+                 
+                 if (result == 0) {
+                     std::cout << "Extraction successful.\n";
+                     romsFound++;
+                 } else {
+                     std::cerr << "Extraction failed with code: " << result << "\n";
+                 }
+             }
+        }
+        else if (isRom) {
+          std::filesystem::path sourcePath = downloadPath / filename;
+          std::filesystem::path destPath = gamesPath / filename;
+          
+          try {
+              // Use filesystem rename (move) instead of system command
+              // This is more robust and handles paths better
+              std::filesystem::rename(sourcePath, destPath);
+              std::cout << "Moved to Games folder: " << filename << "\n";
+              romsFound++;
+          } catch (const std::filesystem::filesystem_error& e) {
+              std::cerr << "Failed to move " << filename << ": " << e.what() << "\n";
+              // Try copy and delete as fallback (cross-device move)
+              try {
+                  std::filesystem::copy(sourcePath, destPath, std::filesystem::copy_options::overwrite_existing);
+                  std::filesystem::remove(sourcePath);
+                  std::cout << "Copied and deleted: " << filename << "\n";
+                  romsFound++;
+              } catch (const std::exception& e2) {
+                  std::cerr << "Copy fallback failed: " << e2.what() << "\n";
+              }
+          }
+        }
+      } while (FindNextFileA(hFind, &findData) != 0);
+      FindClose(hFind);
+  } else {
+      std::cout << "No files in Downloads folder\n";
   }
   
-  // Second pass: Move ROM files from Downloads to Games folder
-  hFind = FindFirstFileA(searchPath.c_str(), &findData);
-  if (hFind == INVALID_HANDLE_VALUE) return;
-  
-  int romsFound = 0;
-  do {
-    std::string filename = findData.cFileName;
-    if (filename == "." || filename == "..") continue;
-    
-    // Check if it's a PSP ROM file (.iso, .cso, .pbp)
-    std::string lower = filename;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    
-    bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
-    
-    if (isRom) {
-      std::string sourcePath = downloadPath + "\\" + filename;
-      std::string destPath = gamesPath + "\\" + filename;
-      
-      // Move the ROM file to Games folder
-      std::string moveCmd = "move /Y \"" + sourcePath + "\" \"" + destPath + "\"";
-      int moveResult = std::system(moveCmd.c_str());
-      
-      if (moveResult == 0) {
-        std::cout << "Moved to Games folder: " << filename << "\n";
-        
-        // Clean up display name - remove extension first
-        std::string displayName = filename.substr(0, filename.find_last_of('.'));
-        
-        // Replace separators with spaces
-        size_t pos;
-        while ((pos = displayName.find(" - ")) != std::string::npos) {
-            displayName.replace(pos, 3, " ");
-        }
-        std::replace(displayName.begin(), displayName.end(), '_', ' ');
-        
-        // Remove common ROM tags and region codes
-        std::vector<std::string> tagsToRemove = {
-          "(USA)", "(Europe)", "(Japan)", "(Asia)", "(World)", 
-          "(En,Fr,De,Es,It)", "(En)", "(NTSC)", "(PAL)",
-          "[USA]", "[Europe]", "[Japan]", "[Asia]", "[World]",
-          "[!]", "[a]", "[b]", "[t]", "[f]", "[h]", "[o]"
-        };
-        
-        for (const auto& tag : tagsToRemove) {
-          while ((pos = displayName.find(tag)) != std::string::npos) {
-            displayName.erase(pos, tag.length());
-          }
-        }
-        
-        // Remove anything in parentheses or brackets
-        size_t start;
-        while ((start = displayName.find('(')) != std::string::npos) {
-          size_t end = displayName.find(')', start);
-          if (end != std::string::npos) {
-            displayName.erase(start, end - start + 1);
-          } else {
-            break;
-          }
-        }
-        
-        while ((start = displayName.find('[')) != std::string::npos) {
-          size_t end = displayName.find(']', start);
-          if (end != std::string::npos) {
-            displayName.erase(start, end - start + 1);
-          } else {
-            break;
-          }
-        }
-        
-        // Replace underscores with spaces and trim
-        std::replace(displayName.begin(), displayName.end(), '_', ' ');
-        
-        // Trim leading/trailing spaces
-        displayName.erase(0, displayName.find_first_not_of(" \t"));
-        displayName.erase(displayName.find_last_not_of(" \t") + 1);
-        
-        // Remove multiple consecutive spaces
-        while ((pos = displayName.find("  ")) != std::string::npos) {
-          displayName.replace(pos, 2, " ");
-        }
-        
-        // We used to add to menu here, but now we let the second pass handle it
-        // so that metadata extraction logic is centralized.
-        romsFound++;
-      } else {
-        std::cerr << "Failed to move: " << filename << "\n";
-      }
-    }
-  } while (FindNextFileA(hFind, &findData) != 0);
-  
-  FindClose(hFind);
   std::cout << "Total ROMs processed from Downloads: " << romsFound << "\n";
   
   // Also scan Games folder for existing ROMs
-  searchPath = gamesPath + "/*.*";
+  searchPath = gamesPath.string() + "/*.*";
   hFind = FindFirstFileA(searchPath.c_str(), &findData);
   
   if (hFind != INVALID_HANDLE_VALUE) {
@@ -489,7 +447,8 @@ void Menu::scanRomsFolder() {
         item.iconFilename = "psp UMD.png";
 
         // Extract metadata from ROM
-        std::string fullPath = gamesPath + "\\" + filename;
+        std::filesystem::path fullPathObj = gamesPath / filename;
+        std::string fullPath = fullPathObj.string();
         try {
             // Ensure assets/previews exists
             std::filesystem::create_directories("assets/previews");
