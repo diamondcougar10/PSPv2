@@ -302,6 +302,14 @@ void Menu::scanRomsFolder() {
   
   logger.log("Using Games folder: " + gamesPath.string());
   
+  // FIX 1: Ensure Games folder exists (create if it doesn't)
+  std::error_code ec;
+  std::filesystem::create_directories(gamesPath, ec);
+  if (ec) {
+      logger.log("ERROR: Failed to create Games folder: " + gamesPath.string() + " | " + ec.message());
+      // Don't return - try to continue anyway
+  }
+  
   // Use the user's actual Downloads folder
   PWSTR downloadsPathStr = NULL;
   std::filesystem::path downloadPath;
@@ -369,14 +377,37 @@ void Menu::scanRomsFolder() {
              logger.log("Found archive: " + filename);
              std::filesystem::path sourcePath = downloadPath / filename;
              
+             // Get log directory for capturing extraction output
+             std::filesystem::path extractLogPath;
+             {
+                 PWSTR appDataPath = NULL;
+                 if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataPath))) {
+                     extractLogPath = std::filesystem::path(appDataPath) / "PSPV2" / "logs" / ("extract_" + filename + ".log");
+                     CoTaskMemFree(appDataPath);
+                 }
+             }
+             
              std::string cmd;
              if (hasExtension(lower, ".zip")) {
                  // Use PowerShell for .zip files (built-in on Windows)
                  // We use single quotes for paths to handle spaces
                  cmd = "powershell -command \"Expand-Archive -Path '" + sourcePath.string() + "' -DestinationPath '" + gamesPath.string() + "' -Force\"";
              } else {
-                 // Try 7z for others (requires 7-Zip installed)
-                 cmd = "7z x \"" + sourcePath.string() + "\" -o\"" + gamesPath.string() + "\" -y";
+                 // Try bundled 7z first, then system 7z
+                 std::filesystem::path bundled7z = exeDir / "tools" / "7z.exe";
+                 std::string sevenZipCmd = "7z"; // Default to system PATH
+                 if (std::filesystem::exists(bundled7z)) {
+                     sevenZipCmd = "\"" + bundled7z.string() + "\"";
+                     logger.log("Using bundled 7z: " + bundled7z.string());
+                 } else {
+                     logger.log("WARNING: No bundled 7z found, trying system PATH");
+                 }
+                 cmd = sevenZipCmd + " x \"" + sourcePath.string() + "\" -o\"" + gamesPath.string() + "\" -y";
+             }
+             
+             // Append output redirection to capture errors
+             if (!extractLogPath.empty()) {
+                 cmd += " > \"" + extractLogPath.string() + "\" 2>&1";
              }
 
              logger.log("Executing: " + cmd);
@@ -397,6 +428,12 @@ void Menu::scanRomsFolder() {
                  romsFound++;
              } else {
                  logger.log("ERROR: Extraction failed with code: " + std::to_string(result) + " for: " + filename);
+                 if (!extractLogPath.empty()) {
+                     logger.log("See extraction log: " + extractLogPath.string());
+                 }
+                 if (result == 9009) {
+                     logger.log("ERROR: Command not found (7z.exe not in PATH and not bundled)");
+                 }
              }
         }
         else if (isRom) {
@@ -430,27 +467,31 @@ void Menu::scanRomsFolder() {
   logger.log("Archives processed: " + std::to_string(archivesProcessed));
   logger.log("Total ROMs processed from Downloads: " + std::to_string(romsFound));
   
-  // Also scan Games folder for existing ROMs
-  searchPath = gamesPath.string() + "/*.*";
-  hFind = FindFirstFileA(searchPath.c_str(), &findData);
+  // FIX 4: Recursively scan Games folder for ROMs (including subfolders from extracted archives)
+  logger.log("Scanning Games folder recursively for ROMs...");
+  int existingRoms = 0;
   
-  if (hFind != INVALID_HANDLE_VALUE) {
-    int existingRoms = 0;
-    do {
-      std::string filename = findData.cFileName;
-      if (filename == "." || filename == "..") continue;
+  try {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(gamesPath)) {
+      if (!entry.is_regular_file()) continue;
       
+      std::string filename = entry.path().filename().string();
       std::string lower = filename;
       std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
       
       bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
       
       if (isRom) {
+        // Get the relative path from gamesPath for storage
+        std::filesystem::path relativePath = std::filesystem::relative(entry.path(), gamesPath);
+        std::string relativePathStr = relativePath.string();
+        
         // Check if this ROM is already in the menu (avoid duplicates)
         bool alreadyExists = false;
         for (const auto& existingItem : categories_[gamesIdx].items) {
           // Check if path contains this filename
-          if (existingItem.path.find(filename) != std::string::npos) {
+          if (existingItem.path.find(filename) != std::string::npos || 
+              existingItem.path == relativePathStr) {
             alreadyExists = true;
             break;
           }
@@ -459,6 +500,8 @@ void Menu::scanRomsFolder() {
         if (alreadyExists) {
           continue; // Skip this ROM, it's already in the menu
         }
+        
+        logger.log("Found ROM: " + relativePathStr);
         
         // Clean up display name
         std::string displayName = filename.substr(0, filename.find_last_of('.'));
@@ -521,13 +564,12 @@ void Menu::scanRomsFolder() {
         // Add to menu
         MenuItem item;
         item.label = displayName.empty() ? filename : displayName;
-        item.path = filename;  // Just filename, launcher will prepend gamesRoot
+        item.path = relativePathStr;  // Use relative path to support subfolders
         item.type = hasExtension(lower, ".pbp") ? "psp_eboot" : "psp_iso";
         item.iconFilename = "psp UMD.png";
 
-        // Extract metadata from ROM
-        std::filesystem::path fullPathObj = gamesPath / filename;
-        std::string fullPath = fullPathObj.string();
+        // Extract metadata from ROM - use full absolute path
+        std::string fullPath = entry.path().string();
         try {
             // Ensure assets/previews exists
             std::filesystem::create_directories("assets/previews");
@@ -589,10 +631,10 @@ void Menu::scanRomsFolder() {
         categories_[gamesIdx].items.push_back(item);
         existingRoms++;
       }
-    } while (FindNextFileA(hFind, &findData) != 0);
-    
-    FindClose(hFind);
-    std::cout << "Found " << existingRoms << " existing ROMs in Games folder\n";
+    }
+    logger.log("Found " + std::to_string(existingRoms) + " ROMs in Games folder (recursive scan)");
+  } catch (const std::exception& e) {
+    logger.log("ERROR: Failed to scan Games folder: " + std::string(e.what()));
   }
 }
 
