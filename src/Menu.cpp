@@ -311,8 +311,8 @@ void Menu::scanRomsFolder() {
       // Don't return - try to continue anyway
   }
   
-  // Build list of Downloads folders to scan (user's + app's local)
-  std::vector<std::filesystem::path> downloadFolders;
+  // Collect download paths to scan (both user Downloads and app Downloads)
+  std::vector<std::filesystem::path> downloadPaths;
   
   // 1. User's Windows Downloads folder
   PWSTR downloadsPathStr = NULL;
@@ -320,21 +320,21 @@ void Menu::scanRomsFolder() {
       std::filesystem::path userDownloads = std::filesystem::path(downloadsPathStr);
       CoTaskMemFree(downloadsPathStr);
       if (std::filesystem::exists(userDownloads)) {
-          downloadFolders.push_back(userDownloads);
+          downloadPaths.push_back(userDownloads);
           logger.log("Added User Downloads: " + userDownloads.string());
       }
   }
   
-  // 2. App's local Downloads folder (next to exe)
+  // 2. App's local Downloads folder (next to executable)
   std::filesystem::path appDownloads = exeDir / "Downloads";
   if (std::filesystem::exists(appDownloads)) {
-      downloadFolders.push_back(appDownloads);
+      downloadPaths.push_back(appDownloads);
       logger.log("Added App Downloads: " + appDownloads.string());
   }
   
   // Verify paths
   logger.log("Games folder exists: " + std::string(std::filesystem::exists(gamesPath) ? "YES" : "NO"));
-  logger.log("Total Downloads folders to scan: " + std::to_string(downloadFolders.size()));
+  logger.log("Total download folders to scan: " + std::to_string(downloadPaths.size()));
 
   // Find the Games category index first
   size_t gamesIdx = 0;
@@ -355,97 +355,79 @@ void Menu::scanRomsFolder() {
   int romsFound = 0;
   int archivesProcessed = 0;
   
-  // Track processed archives by base name to avoid duplicates across folders
-  // Use a map: baseName -> (fullPath, lastWriteTime) to keep the newest
+  // Collect all archives from all download folders, tracking newest version of each
+  // Key: lowercase filename, Value: {full path, last write time}
   std::map<std::string, std::pair<std::filesystem::path, std::filesystem::file_time_type>> archiveMap;
   std::map<std::string, std::pair<std::filesystem::path, std::filesystem::file_time_type>> romMap;
   
-  // First pass: collect all archives and ROMs from all Downloads folders
-  for (const auto& downloadPath : downloadFolders) {
+  for (const auto& downloadPath : downloadPaths) {
       logger.log("Scanning: " + downloadPath.string());
       
-      WIN32_FIND_DATAW findData;
-      std::wstring searchPath = downloadPath.wstring() + L"\\*.*";
-      
-      HANDLE hFind = FindFirstFileW(searchPath.c_str(), &findData);
-      if (hFind == INVALID_HANDLE_VALUE) {
-          logger.log("No files found in: " + downloadPath.string());
-          continue;
-      }
-      
-      do {
-          std::wstring wfilename = findData.cFileName;
-          if (wfilename == L"." || wfilename == L"..") continue;
-          
-          // Convert wstring to string properly
-          std::string filename;
-          for (wchar_t wc : wfilename) {
-              filename += static_cast<char>(wc & 0xFF);
-          }
-          std::string lower = filename;
-          std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-          
-          bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
-          bool isZip = hasExtension(lower, ".zip") || hasExtension(lower, ".7z") || hasExtension(lower, ".rar");
-          
-          std::filesystem::path fullPath = downloadPath / filename;
-          
-          // Get base name (without extension) for duplicate detection
-          std::string baseName = filename.substr(0, filename.find_last_of('.'));
-          std::string baseNameLower = baseName;
-          std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
-          
-          try {
-              auto writeTime = std::filesystem::last_write_time(fullPath);
+      try {
+          for (const auto& entry : std::filesystem::directory_iterator(downloadPath)) {
+              if (!entry.is_regular_file()) continue;
               
-              if (isZip) {
-                  // Check if we already have this archive (by base name)
-                  auto it = archiveMap.find(baseNameLower);
-                  if (it == archiveMap.end() || writeTime > it->second.second) {
-                      archiveMap[baseNameLower] = {fullPath, writeTime};
-                      logger.log("Found archive: " + filename + " (from " + downloadPath.string() + ")");
+              std::string filename = entry.path().filename().string();
+              std::string lower = filename;
+              std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+              
+              bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
+              bool isZip = hasExtension(lower, ".zip") || hasExtension(lower, ".7z") || hasExtension(lower, ".rar");
+              
+              if (isZip || isRom) {
+                  auto lastWriteTime = std::filesystem::last_write_time(entry.path());
+                  auto& targetMap = isZip ? archiveMap : romMap;
+                  
+                  // Check if we already have this file (by lowercase name)
+                  auto it = targetMap.find(lower);
+                  if (it == targetMap.end()) {
+                      // First occurrence
+                      targetMap[lower] = {entry.path(), lastWriteTime};
+                      logger.log("Found: " + filename + " in " + downloadPath.string());
                   } else {
-                      logger.log("Skipping older duplicate: " + filename);
-                  }
-              } else if (isRom) {
-                  auto it = romMap.find(baseNameLower);
-                  if (it == romMap.end() || writeTime > it->second.second) {
-                      romMap[baseNameLower] = {fullPath, writeTime};
-                      logger.log("Found ROM: " + filename + " (from " + downloadPath.string() + ")");
-                  } else {
-                      logger.log("Skipping older duplicate ROM: " + filename);
+                      // Duplicate - keep the newer one
+                      if (lastWriteTime > it->second.second) {
+                          logger.log("Duplicate found, using newer: " + entry.path().string());
+                          targetMap[lower] = {entry.path(), lastWriteTime};
+                      } else {
+                          logger.log("Duplicate found, keeping existing (newer): " + it->second.first.string());
+                      }
                   }
               }
-          } catch (...) {
-              // Ignore errors getting file time
           }
-      } while (FindNextFileW(hFind, &findData) != 0);
-      FindClose(hFind);
+      } catch (const std::exception& e) {
+          logger.log("ERROR scanning " + downloadPath.string() + ": " + e.what());
+      }
   }
   
   logger.log("Unique archives found: " + std::to_string(archiveMap.size()));
-  logger.log("Unique ROMs found: " + std::to_string(romMap.size()));
+  logger.log("Unique ROM files found: " + std::to_string(romMap.size()));
   
-  // Second pass: Extract archives (newest versions only)
-  for (const auto& [baseName, archiveInfo] : archiveMap) {
-      const auto& sourcePath = archiveInfo.first;
+  // Process archives (extract to Games)
+  for (const auto& [lowerName, pathTimePair] : archiveMap) {
+      const std::filesystem::path& sourcePath = pathTimePair.first;
       std::string filename = sourcePath.filename().string();
       std::string lower = filename;
       std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
       
+      // Get expected extracted folder/file name (archive name without extension)
+      std::string baseName = filename.substr(0, filename.find_last_of('.'));
       std::filesystem::path expectedExtractPath = gamesPath / baseName;
       
       // Check if content already exists in Games folder
       bool contentExists = std::filesystem::exists(expectedExtractPath);
       
       if (!contentExists) {
+          // Also check if any ROM in Games folder matches this archive name
           try {
               for (const auto& gameEntry : std::filesystem::directory_iterator(gamesPath)) {
                   std::string gameFilename = gameEntry.path().filename().string();
                   std::string gameLower = gameFilename;
                   std::transform(gameLower.begin(), gameLower.end(), gameLower.begin(), ::tolower);
+                  std::string baseNameLower = baseName;
+                  std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
                   
-                  if (gameLower.find(baseName.substr(0, std::min(baseName.length(), size_t(20)))) != std::string::npos) {
+                  if (gameLower.find(baseNameLower.substr(0, std::min(baseNameLower.length(), size_t(20)))) != std::string::npos) {
                       contentExists = true;
                       logger.log("Archive content already exists: " + gameFilename);
                       break;
@@ -461,6 +443,7 @@ void Menu::scanRomsFolder() {
       
       logger.log("Extracting archive (content missing from Games): " + filename);
       
+      // Get log directory for capturing extraction output
       std::filesystem::path extractLogPath;
       {
           PWSTR appDataPath = NULL;
@@ -495,7 +478,7 @@ void Menu::scanRomsFolder() {
       if (result == 0) {
           logger.log("Extraction successful for: " + filename);
           archivesProcessed++;
-          logger.log("Archive kept for backup: " + filename);
+          logger.log("Archive kept for backup: " + sourcePath.string());
           romsFound++;
       } else {
           logger.log("ERROR: Extraction failed with code: " + std::to_string(result) + " for: " + filename);
@@ -508,19 +491,19 @@ void Menu::scanRomsFolder() {
       }
   }
   
-  // Third pass: Move ROM files (newest versions only)
-  for (const auto& [baseName, romInfo] : romMap) {
-      const auto& sourcePath = romInfo.first;
+  // Process loose ROM files (copy to Games)
+  for (const auto& [lowerName, pathTimePair] : romMap) {
+      const std::filesystem::path& sourcePath = pathTimePair.first;
       std::string filename = sourcePath.filename().string();
       std::filesystem::path destPath = gamesPath / filename;
       
-      // Skip if already exists in Games
+      // Check if already in Games
       if (std::filesystem::exists(destPath)) {
           logger.log("ROM already in Games, skipping: " + filename);
           continue;
       }
       
-      logger.log("Moving ROM file: " + filename);
+      logger.log("Copying ROM file: " + filename);
       try {
           std::filesystem::copy(sourcePath, destPath, std::filesystem::copy_options::overwrite_existing);
           logger.log("Copied to Games folder: " + filename);
