@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <map>
 #include <windows.h>
 #include <filesystem>
 #include <cstdint>
@@ -310,21 +311,30 @@ void Menu::scanRomsFolder() {
       // Don't return - try to continue anyway
   }
   
-  // Use the user's actual Downloads folder
+  // Build list of Downloads folders to scan (user's + app's local)
+  std::vector<std::filesystem::path> downloadFolders;
+  
+  // 1. User's Windows Downloads folder
   PWSTR downloadsPathStr = NULL;
-  std::filesystem::path downloadPath;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, 0, NULL, &downloadsPathStr))) {
-      downloadPath = std::filesystem::path(downloadsPathStr);
+      std::filesystem::path userDownloads = std::filesystem::path(downloadsPathStr);
       CoTaskMemFree(downloadsPathStr);
-      logger.log("Scanning User Downloads: " + downloadPath.string());
-  } else {
-      downloadPath = std::filesystem::absolute("Downloads"); // Fallback
-      logger.log("WARNING: Could not get user Downloads, using fallback: " + downloadPath.string());
+      if (std::filesystem::exists(userDownloads)) {
+          downloadFolders.push_back(userDownloads);
+          logger.log("Added User Downloads: " + userDownloads.string());
+      }
   }
   
-  // Verify both paths exist
+  // 2. App's local Downloads folder (next to exe)
+  std::filesystem::path appDownloads = exeDir / "Downloads";
+  if (std::filesystem::exists(appDownloads)) {
+      downloadFolders.push_back(appDownloads);
+      logger.log("Added App Downloads: " + appDownloads.string());
+  }
+  
+  // Verify paths
   logger.log("Games folder exists: " + std::string(std::filesystem::exists(gamesPath) ? "YES" : "NO"));
-  logger.log("Downloads folder exists: " + std::string(std::filesystem::exists(downloadPath) ? "YES" : "NO"));
+  logger.log("Total Downloads folders to scan: " + std::to_string(downloadFolders.size()));
 
   // Find the Games category index first
   size_t gamesIdx = 0;
@@ -344,158 +354,180 @@ void Menu::scanRomsFolder() {
 
   int romsFound = 0;
   int archivesProcessed = 0;
-  WIN32_FIND_DATAA findData;
   
-  // Scan Downloads folder for PSP ROMs
-  std::string searchPath = downloadPath.string() + "/*.*";
-  logger.log("Search path: " + searchPath);
+  // Track processed archives by base name to avoid duplicates across folders
+  // Use a map: baseName -> (fullPath, lastWriteTime) to keep the newest
+  std::map<std::string, std::pair<std::filesystem::path, std::filesystem::file_time_type>> archiveMap;
+  std::map<std::string, std::pair<std::filesystem::path, std::filesystem::file_time_type>> romMap;
   
-  HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
-  
-  if (hFind == INVALID_HANDLE_VALUE) {
-      logger.log("ERROR: FindFirstFileA failed or no files. Error code: " + std::to_string(GetLastError()));
+  // First pass: collect all archives and ROMs from all Downloads folders
+  for (const auto& downloadPath : downloadFolders) {
+      logger.log("Scanning: " + downloadPath.string());
+      
+      WIN32_FIND_DATAW findData;
+      std::wstring searchPath = downloadPath.wstring() + L"\\*.*";
+      
+      HANDLE hFind = FindFirstFileW(searchPath.c_str(), &findData);
+      if (hFind == INVALID_HANDLE_VALUE) {
+          logger.log("No files found in: " + downloadPath.string());
+          continue;
+      }
+      
+      do {
+          std::wstring wfilename = findData.cFileName;
+          if (wfilename == L"." || wfilename == L"..") continue;
+          
+          // Convert wstring to string properly
+          std::string filename;
+          for (wchar_t wc : wfilename) {
+              filename += static_cast<char>(wc & 0xFF);
+          }
+          std::string lower = filename;
+          std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+          
+          bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
+          bool isZip = hasExtension(lower, ".zip") || hasExtension(lower, ".7z") || hasExtension(lower, ".rar");
+          
+          std::filesystem::path fullPath = downloadPath / filename;
+          
+          // Get base name (without extension) for duplicate detection
+          std::string baseName = filename.substr(0, filename.find_last_of('.'));
+          std::string baseNameLower = baseName;
+          std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
+          
+          try {
+              auto writeTime = std::filesystem::last_write_time(fullPath);
+              
+              if (isZip) {
+                  // Check if we already have this archive (by base name)
+                  auto it = archiveMap.find(baseNameLower);
+                  if (it == archiveMap.end() || writeTime > it->second.second) {
+                      archiveMap[baseNameLower] = {fullPath, writeTime};
+                      logger.log("Found archive: " + filename + " (from " + downloadPath.string() + ")");
+                  } else {
+                      logger.log("Skipping older duplicate: " + filename);
+                  }
+              } else if (isRom) {
+                  auto it = romMap.find(baseNameLower);
+                  if (it == romMap.end() || writeTime > it->second.second) {
+                      romMap[baseNameLower] = {fullPath, writeTime};
+                      logger.log("Found ROM: " + filename + " (from " + downloadPath.string() + ")");
+                  } else {
+                      logger.log("Skipping older duplicate ROM: " + filename);
+                  }
+              }
+          } catch (...) {
+              // Ignore errors getting file time
+          }
+      } while (FindNextFileW(hFind, &findData) != 0);
+      FindClose(hFind);
   }
   
-  if (hFind != INVALID_HANDLE_VALUE) {
-      logger.log("Scanning Downloads folder...");
-      // First pass: Move ROM files from Downloads to Games folder
-      do {
-        std::string filename = findData.cFileName;
-        if (filename == "." || filename == "..") continue;
-        
-        std::string lower = filename;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        
-        bool isRom = hasExtension(lower, ".iso") || hasExtension(lower, ".cso") || hasExtension(lower, ".pbp");
-        
-        // Also check for ZIP files to extract
-        bool isZip = hasExtension(lower, ".zip") || hasExtension(lower, ".7z") || hasExtension(lower, ".rar");
-        
-        if (isZip) {
-             // Extract any zip/7z/rar file - user explicitly put it in Downloads
-             // so we assume they want it extracted to Games
-             logger.log("Found archive: " + filename);
-             std::filesystem::path sourcePath = downloadPath / filename;
-             
-             // Get expected extracted folder/file name (archive name without extension)
-             std::string baseName = filename.substr(0, filename.find_last_of('.'));
-             std::filesystem::path expectedExtractPath = gamesPath / baseName;
-             
-             // Check if content already exists in Games folder
-             // Look for: exact folder match, or any ROM file containing the base name
-             bool contentExists = std::filesystem::exists(expectedExtractPath);
-             
-             if (!contentExists) {
-                 // Also check if any ROM in Games folder matches this archive name
-                 // (in case extraction put files directly without a subfolder)
-                 try {
-                     for (const auto& gameEntry : std::filesystem::directory_iterator(gamesPath)) {
-                         std::string gameFilename = gameEntry.path().filename().string();
-                         std::string gameLower = gameFilename;
-                         std::transform(gameLower.begin(), gameLower.end(), gameLower.begin(), ::tolower);
-                         std::string baseNameLower = baseName;
-                         std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
-                         
-                         // Check if this file/folder name starts with or contains the archive base name
-                         if (gameLower.find(baseNameLower.substr(0, std::min(baseNameLower.length(), size_t(20)))) != std::string::npos) {
-                             contentExists = true;
-                             logger.log("Archive content already exists: " + gameFilename);
-                             break;
-                         }
-                     }
-                 } catch (...) {
-                     // Ignore errors during check
-                 }
-             }
-             
-             if (contentExists) {
-                 logger.log("Skipping archive (content already in Games): " + filename);
-                 continue; // Skip - already extracted
-             }
-             
-             logger.log("Extracting archive (content missing from Games): " + filename);
-             
-             // Get log directory for capturing extraction output
-             std::filesystem::path extractLogPath;
-             {
-                 PWSTR appDataPath = NULL;
-                 if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataPath))) {
-                     extractLogPath = std::filesystem::path(appDataPath) / "PSPV2" / "logs" / ("extract_" + filename + ".log");
-                     CoTaskMemFree(appDataPath);
-                 }
-             }
-             
-             std::string cmd;
-             if (hasExtension(lower, ".zip")) {
-                 // Use PowerShell for .zip files (built-in on Windows)
-                 // We use single quotes for paths to handle spaces
-                 cmd = "powershell -command \"Expand-Archive -Path '" + sourcePath.string() + "' -DestinationPath '" + gamesPath.string() + "' -Force\"";
-             } else {
-                 // Try bundled 7z first, then system 7z
-                 std::filesystem::path bundled7z = exeDir / "tools" / "7z.exe";
-                 std::string sevenZipCmd = "7z"; // Default to system PATH
-                 if (std::filesystem::exists(bundled7z)) {
-                     sevenZipCmd = "\"" + bundled7z.string() + "\"";
-                     logger.log("Using bundled 7z: " + bundled7z.string());
-                 } else {
-                     logger.log("WARNING: No bundled 7z found, trying system PATH");
-                 }
-                 cmd = sevenZipCmd + " x \"" + sourcePath.string() + "\" -o\"" + gamesPath.string() + "\" -y";
-             }
-             
-             // Append output redirection to capture errors
-             if (!extractLogPath.empty()) {
-                 cmd += " > \"" + extractLogPath.string() + "\" 2>&1";
-             }
-
-             logger.log("Executing: " + cmd);
-             int result = system(cmd.c_str());
-             
-             if (result == 0) {
-                 logger.log("Extraction successful for: " + filename);
-                 archivesProcessed++;
-                 
-                 // Keep archive in Downloads as backup for recovery
-                 // If user accidentally deletes from Games, it will be re-extracted next launch
-                 logger.log("Archive kept in Downloads for backup: " + filename);
-                 
-                 romsFound++;
-             } else {
-                 logger.log("ERROR: Extraction failed with code: " + std::to_string(result) + " for: " + filename);
-                 if (!extractLogPath.empty()) {
-                     logger.log("See extraction log: " + extractLogPath.string());
-                 }
-                 if (result == 9009) {
-                     logger.log("ERROR: Command not found (7z.exe not in PATH and not bundled)");
-                 }
-             }
-        }
-        else if (isRom) {
-          std::filesystem::path sourcePath = downloadPath / filename;
-          std::filesystem::path destPath = gamesPath / filename;
-          
-          logger.log("Found ROM file: " + filename);
+  logger.log("Unique archives found: " + std::to_string(archiveMap.size()));
+  logger.log("Unique ROMs found: " + std::to_string(romMap.size()));
+  
+  // Second pass: Extract archives (newest versions only)
+  for (const auto& [baseName, archiveInfo] : archiveMap) {
+      const auto& sourcePath = archiveInfo.first;
+      std::string filename = sourcePath.filename().string();
+      std::string lower = filename;
+      std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+      
+      std::filesystem::path expectedExtractPath = gamesPath / baseName;
+      
+      // Check if content already exists in Games folder
+      bool contentExists = std::filesystem::exists(expectedExtractPath);
+      
+      if (!contentExists) {
           try {
-              // Use filesystem rename (move) instead of system command
-              // This is more robust and handles paths better
-              std::filesystem::rename(sourcePath, destPath);
-              logger.log("Moved to Games folder: " + filename);
-              romsFound++;
-          } catch (const std::filesystem::filesystem_error& e) {
-              logger.log("ERROR: Failed to move " + filename + ": " + std::string(e.what()));
-              // Try copy and delete as fallback (cross-device move)
-              try {
-                  std::filesystem::copy(sourcePath, destPath, std::filesystem::copy_options::overwrite_existing);
-                  std::filesystem::remove(sourcePath);
-                  logger.log("Copied and deleted (fallback): " + filename);
-                  romsFound++;
-              } catch (const std::exception& e2) {
-                  logger.log("ERROR: Copy fallback failed: " + std::string(e2.what()));
+              for (const auto& gameEntry : std::filesystem::directory_iterator(gamesPath)) {
+                  std::string gameFilename = gameEntry.path().filename().string();
+                  std::string gameLower = gameFilename;
+                  std::transform(gameLower.begin(), gameLower.end(), gameLower.begin(), ::tolower);
+                  
+                  if (gameLower.find(baseName.substr(0, std::min(baseName.length(), size_t(20)))) != std::string::npos) {
+                      contentExists = true;
+                      logger.log("Archive content already exists: " + gameFilename);
+                      break;
+                  }
               }
+          } catch (...) {}
+      }
+      
+      if (contentExists) {
+          logger.log("Skipping archive (content already in Games): " + filename);
+          continue;
+      }
+      
+      logger.log("Extracting archive (content missing from Games): " + filename);
+      
+      std::filesystem::path extractLogPath;
+      {
+          PWSTR appDataPath = NULL;
+          if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataPath))) {
+              extractLogPath = std::filesystem::path(appDataPath) / "PSPV2" / "logs" / ("extract_" + filename + ".log");
+              CoTaskMemFree(appDataPath);
           }
-        }
-      } while (FindNextFileA(hFind, &findData) != 0);
-      FindClose(hFind);
+      }
+      
+      std::string cmd;
+      if (hasExtension(lower, ".zip")) {
+          cmd = "powershell -command \"Expand-Archive -Path '" + sourcePath.string() + "' -DestinationPath '" + gamesPath.string() + "' -Force\"";
+      } else {
+          std::filesystem::path bundled7z = exeDir / "tools" / "7z.exe";
+          std::string sevenZipCmd = "7z";
+          if (std::filesystem::exists(bundled7z)) {
+              sevenZipCmd = "\"" + bundled7z.string() + "\"";
+              logger.log("Using bundled 7z: " + bundled7z.string());
+          } else {
+              logger.log("WARNING: No bundled 7z found, trying system PATH");
+          }
+          cmd = sevenZipCmd + " x \"" + sourcePath.string() + "\" -o\"" + gamesPath.string() + "\" -y";
+      }
+      
+      if (!extractLogPath.empty()) {
+          cmd += " > \"" + extractLogPath.string() + "\" 2>&1";
+      }
+
+      logger.log("Executing: " + cmd);
+      int result = system(cmd.c_str());
+      
+      if (result == 0) {
+          logger.log("Extraction successful for: " + filename);
+          archivesProcessed++;
+          logger.log("Archive kept for backup: " + filename);
+          romsFound++;
+      } else {
+          logger.log("ERROR: Extraction failed with code: " + std::to_string(result) + " for: " + filename);
+          if (!extractLogPath.empty()) {
+              logger.log("See extraction log: " + extractLogPath.string());
+          }
+          if (result == 9009) {
+              logger.log("ERROR: Command not found (7z.exe not in PATH and not bundled)");
+          }
+      }
+  }
+  
+  // Third pass: Move ROM files (newest versions only)
+  for (const auto& [baseName, romInfo] : romMap) {
+      const auto& sourcePath = romInfo.first;
+      std::string filename = sourcePath.filename().string();
+      std::filesystem::path destPath = gamesPath / filename;
+      
+      // Skip if already exists in Games
+      if (std::filesystem::exists(destPath)) {
+          logger.log("ROM already in Games, skipping: " + filename);
+          continue;
+      }
+      
+      logger.log("Moving ROM file: " + filename);
+      try {
+          std::filesystem::copy(sourcePath, destPath, std::filesystem::copy_options::overwrite_existing);
+          logger.log("Copied to Games folder: " + filename);
+          romsFound++;
+      } catch (const std::exception& e) {
+          logger.log("ERROR: Failed to copy " + filename + ": " + std::string(e.what()));
+      }
   }
   
   logger.log("Archives processed: " + std::to_string(archivesProcessed));
