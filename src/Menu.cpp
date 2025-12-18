@@ -377,6 +377,44 @@ void Menu::scanRomsFolder() {
              logger.log("Found archive: " + filename);
              std::filesystem::path sourcePath = downloadPath / filename;
              
+             // Get expected extracted folder/file name (archive name without extension)
+             std::string baseName = filename.substr(0, filename.find_last_of('.'));
+             std::filesystem::path expectedExtractPath = gamesPath / baseName;
+             
+             // Check if content already exists in Games folder
+             // Look for: exact folder match, or any ROM file containing the base name
+             bool contentExists = std::filesystem::exists(expectedExtractPath);
+             
+             if (!contentExists) {
+                 // Also check if any ROM in Games folder matches this archive name
+                 // (in case extraction put files directly without a subfolder)
+                 try {
+                     for (const auto& gameEntry : std::filesystem::directory_iterator(gamesPath)) {
+                         std::string gameFilename = gameEntry.path().filename().string();
+                         std::string gameLower = gameFilename;
+                         std::transform(gameLower.begin(), gameLower.end(), gameLower.begin(), ::tolower);
+                         std::string baseNameLower = baseName;
+                         std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
+                         
+                         // Check if this file/folder name starts with or contains the archive base name
+                         if (gameLower.find(baseNameLower.substr(0, std::min(baseNameLower.length(), size_t(20)))) != std::string::npos) {
+                             contentExists = true;
+                             logger.log("Archive content already exists: " + gameFilename);
+                             break;
+                         }
+                     }
+                 } catch (...) {
+                     // Ignore errors during check
+                 }
+             }
+             
+             if (contentExists) {
+                 logger.log("Skipping archive (content already in Games): " + filename);
+                 continue; // Skip - already extracted
+             }
+             
+             logger.log("Extracting archive (content missing from Games): " + filename);
+             
              // Get log directory for capturing extraction output
              std::filesystem::path extractLogPath;
              {
@@ -417,13 +455,9 @@ void Menu::scanRomsFolder() {
                  logger.log("Extraction successful for: " + filename);
                  archivesProcessed++;
                  
-                 // Try to delete the archive after successful extraction
-                 try {
-                     std::filesystem::remove(sourcePath);
-                     logger.log("Deleted archive: " + filename);
-                 } catch (const std::exception& e) {
-                     logger.log("WARNING: Could not delete archive: " + std::string(e.what()));
-                 }
+                 // Keep archive in Downloads as backup for recovery
+                 // If user accidentally deletes from Games, it will be re-extracted next launch
+                 logger.log("Archive kept in Downloads for backup: " + filename);
                  
                  romsFound++;
              } else {
