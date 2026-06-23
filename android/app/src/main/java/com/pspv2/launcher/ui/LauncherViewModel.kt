@@ -12,11 +12,13 @@ import com.pspv2.launcher.data.ConfigRepository
 import com.pspv2.launcher.data.CustomTheme
 import com.pspv2.launcher.data.MenuConfig
 import com.pspv2.launcher.data.MenuItem
+import com.pspv2.launcher.data.RomImporter
 import com.pspv2.launcher.data.RomScanner
 import com.pspv2.launcher.data.UserProfile
 import com.pspv2.launcher.input.GamepadAction
 import com.pspv2.launcher.launch.GameLauncher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +32,7 @@ import kotlinx.coroutines.withContext
 enum class AppScreen { Intro, Setup, Menu, ControllerSelect, GameStartup, ThemeSelect, ThemeCreate, About, HowTo }
 
 /** One-shot events emitted to the host activity. */
-enum class UiEvent { Exit, PickRomFolder }
+enum class UiEvent { Exit, PickRomFolder, PickRomFile }
 
 /** Options available in the XMB quick menu overlay (Android port of QuickMenu.cpp). */
 enum class QuickMenuOption(val label: String) {
@@ -39,6 +41,13 @@ enum class QuickMenuOption(val label: String) {
     About("About"),
     Exit("Exit PSPV2")
 }
+
+/** Progress / result banner shown while importing a downloaded ROM. */
+data class ImportStatus(
+    val message: String,
+    val busy: Boolean,
+    val isError: Boolean = false
+)
 
 data class UiState(
     val screen: AppScreen = AppScreen.Intro,
@@ -52,7 +61,9 @@ data class UiState(
     val quickMenuIndex: Int = 0,
     val customTheme: CustomTheme = CustomTheme(),
     /** True when the user tried to launch a game but no PPSSPP build is installed. */
-    val ppssppMissing: Boolean = false
+    val ppssppMissing: Boolean = false,
+    /** Non-null while a ROM import is running or its result is being shown. */
+    val importStatus: ImportStatus? = null
 ) {
     val currentCategory: Category? get() = categories.getOrNull(categoryIndex)
     val currentItem: MenuItem? get() = currentCategory?.items?.getOrNull(itemIndex)
@@ -70,6 +81,16 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /**
+     * The non-game action items declared in the menu.json "games" category (e.g. the
+     * "Install Game" entry). Preserved across rescans/imports so the category always
+     * keeps its actions even when no ROMs are present yet.
+     */
+    private var gamesAnchors: List<MenuItem> = emptyList()
+
+    /** ROMs discovered by scanning the user's chosen SAF folder (Scan ROM Folder). */
+    private var safGames: List<MenuItem> = emptyList()
 
     /** One-shot UI events the host activity reacts to (e.g. exit). */
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)
@@ -112,6 +133,12 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
                 customTheme = customTheme
             )
         }
+        // Remember the games category's non-ROM action items (e.g. "Install Game") so
+        // they survive rescans, then merge any previously imported ROMs into view.
+        gamesAnchors = menu.categories.firstOrNull { it.id == "games" }
+            ?.items.orEmpty()
+            .filter { it.type != "psp_iso" && it.type != "psp_eboot" }
+        rebuildGamesCategory()
         // If the user previously chose a ROM folder, rescan it on launch so newly
         // added games show up without re-picking the folder.
         if (settings.games_tree_uri.isNotBlank()) {
@@ -143,13 +170,26 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching { RomScanner.scan(getApplication(), treeUri) }.getOrDefault(emptyList())
             }
             if (games.isNotEmpty()) {
-                _state.update { st ->
-                    val updated = st.categories.map { cat ->
-                        if (cat.id == "games") cat.copy(items = games) else cat
-                    }
-                    st.copy(categories = updated)
-                }
+                safGames = games
+                rebuildGamesCategory()
             }
+        }
+    }
+
+    /**
+     * Recomputes the "games" category items from all sources: the permanent action
+     * anchors (e.g. "Install Game"), imported ROMs on disk, and SAF-scanned ROMs.
+     * De-duplicated by path so a game listed in two places only appears once.
+     */
+    private fun rebuildGamesCategory() {
+        val imported = runCatching { repo.scanImportedGames() }.getOrDefault(emptyList())
+        val games = (imported + safGames).distinctBy { it.path }.sortedBy { it.label.lowercase() }
+        val items = gamesAnchors + games
+        _state.update { st ->
+            val updated = st.categories.map { cat ->
+                if (cat.id == "games") cat.copy(items = items) else cat
+            }
+            st.copy(categories = updated)
         }
     }
 
@@ -304,9 +344,11 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
             "theme_select" -> goTo(AppScreen.ThemeSelect)
             "theme_create" -> goTo(AppScreen.ThemeCreate)
             "scan_roms" -> _events.tryEmit(UiEvent.PickRomFolder)
+            "import_rom" -> _events.tryEmit(UiEvent.PickRomFile)
             "how_to_games" -> goTo(AppScreen.HowTo)
             "factory_reset" -> factoryReset()
             "about" -> goTo(AppScreen.About)
+            "exit_app" -> _events.tryEmit(UiEvent.Exit)
             else -> launcher.launch(item, _state.value.settings)
         }
     }
@@ -329,13 +371,52 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             sounds.playSystemOk()
-            _state.update { st ->
-                val updated = st.categories.map { cat ->
-                    if (cat.id == "games") cat.copy(items = games) else cat
+            safGames = games
+            rebuildGamesCategory()
+        }
+    }
+
+    /**
+     * Called by the activity once the user picks a downloaded ROM/.zip from the
+     * document picker. Copies/extracts it into the games folder off the main thread,
+     * streaming progress to the on-screen banner, then refreshes the Games category.
+     */
+    fun onRomFilePicked(source: Uri) {
+        _state.update { it.copy(importStatus = ImportStatus("Starting import…", busy = true)) }
+        sounds.playDecide()
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                RomImporter.import(getApplication(), source) { progress ->
+                    _state.update { it.copy(importStatus = ImportStatus(progress, busy = true)) }
                 }
-                st.copy(categories = updated)
+            }
+            if (result.success) {
+                sounds.playSystemOk()
+                rebuildGamesCategory()
+                focusGamesCategory()
+            } else {
+                sounds.playError()
+            }
+            _state.update {
+                it.copy(importStatus = ImportStatus(result.message, busy = false, isError = !result.success))
+            }
+            // Auto-dismiss the banner after letting the user read the result.
+            delay(if (result.success) 3500 else 5000)
+            _state.update {
+                if (it.importStatus?.busy == true) it else it.copy(importStatus = null)
             }
         }
+    }
+
+    /** Manually dismiss the import banner (e.g. on a button press). */
+    fun dismissImportStatus() {
+        _state.update { it.copy(importStatus = null) }
+    }
+
+    /** Moves the XMB selection to the newly populated Games category. */
+    private fun focusGamesCategory() {
+        val idx = _state.value.categories.indexOfFirst { it.id == "games" }
+        if (idx >= 0) _state.update { it.copy(categoryIndex = idx, itemIndex = 0) }
     }
 
     /** Called when the boot animation finishes to actually hand off to PPSSPP. */

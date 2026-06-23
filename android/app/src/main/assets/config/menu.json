@@ -21,7 +21,7 @@
           "label": "Scan ROM Folder",
           "path": "scan_roms",
           "type": "scan_roms",
-          "icon": "psp memory stick.png"
+          "icon": "psp memorystick.png"
         },
         {
           "label": "How to Add Games",
@@ -42,10 +42,73 @@
           "icon": "psp game.png"
         },
         {
+          "label": "Android Settings",
+          "path": "android_settings",
+          "type": "android_settings",
+          "icon": "psp system settings.png"
+        },
+        {
           "label": "Factory Reset",
           "path": "factory_reset",
           "type": "factory_reset",
           "icon": "psp update.png"
+        }
+      ]
+    },
+    {
+      "id": "photos",
+      "label": "Photos",
+      "icon": "photo.png",
+      "items": [
+        {
+          "label": "Photo Gallery",
+          "path": "gallery",
+          "type": "app_gallery",
+          "icon": "psp photo settings.png"
+        },
+        {
+          "label": "Pictures Folder",
+          "path": "files",
+          "type": "app_files",
+          "icon": "psp camera.png"
+        }
+      ]
+    },
+    {
+      "id": "music",
+      "label": "Music",
+      "icon": "psp music.png",
+      "items": [
+        {
+          "label": "Music Player",
+          "path": "music",
+          "type": "app_music",
+          "icon": "psp music.png"
+        },
+        {
+          "label": "Music Folder",
+          "path": "files",
+          "type": "app_files",
+          "icon": "psp radio.png"
+        }
+      ]
+    },
+    {
+      "id": "videos",
+      "label": "Videos",
+      "icon": "video.png",
+      "items": [
+        {
+          "label": "Video Gallery",
+          "path": "gallery",
+          "type": "app_gallery",
+          "icon": "psp video setting.png"
+        },
+        {
+          "label": "Videos Folder",
+          "path": "files",
+          "type": "app_files",
+          "icon": "tv icon.png"
         }
       ]
     },
@@ -55,10 +118,10 @@
       "icon": "psp game.png",
       "items": [
         {
-          "label": "MotorStorm - Arctic Edge",
-          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
-          "type": "psp_iso",
-          "icon": "psp game.png"
+          "label": "Install Game (zip / 7z / rar / ISO)",
+          "path": "import_rom",
+          "type": "import_rom",
+          "icon": "psp memorystick.png"
         }
       ]
     },
@@ -89,7 +152,7 @@
     },
     {
       "id": "store",
-      "label": "Store",
+      "label": "PlayStation Store",
       "icon": "psp network.png",
       "items": [
         {
@@ -97,6 +160,63 @@
           "path": "https://romsfun.com/roms/playstation-portable/",
           "type": "web_url",
           "icon": "psp network update.png"
+        },
+        {
+          "label": "Install Downloaded ROM",
+          "path": "import_rom",
+          "type": "import_rom",
+          "icon": "psp memorystick.png"
+        }
+      ]
+    },
+    {
+      "id": "savedata",
+      "label": "Saved Data",
+      "icon": "psp savedata.png",
+      "items": [
+        {
+          "label": "Open Save Folder",
+          "path": "files",
+          "type": "app_files",
+          "icon": "psp savedata.png"
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "label": "Extras",
+      "icon": "psp memorystick.png",
+      "items": [
+        {
+          "label": "File Manager",
+          "path": "files",
+          "type": "app_files",
+          "icon": "psp memorystick.png"
+        },
+        {
+          "label": "Calculator",
+          "path": "calculator",
+          "type": "app_calculator",
+          "icon": "psp system settings.png"
+        },
+        {
+          "label": "Android Settings",
+          "path": "android_settings",
+          "type": "android_settings",
+          "icon": "psp power settings.png"
+        }
+      ]
+    },
+    {
+      "id": "exit",
+      "label": "Exit",
+      "icon": "white-power-button-hi.png",
+      "items": [
+        {
+          "label": "Quit Application",
+          "path": "exit",
+          "type": "exit_app",
+          "icon": "white-power-button-hi.png"
         }
       ]
     }

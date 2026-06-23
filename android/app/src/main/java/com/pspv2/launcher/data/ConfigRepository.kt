@@ -73,6 +73,27 @@ class ConfigRepository(private val context: Context) {
         runCatching { customThemeFile.writeText(json.encodeToString(theme)) }
     }
 
+    /**
+     * Lists ROMs that were imported via [RomImporter] into the private games folder,
+     * as [MenuItem]s ready to merge into the XMB "games" category. Uses java.io.File
+     * directly because this is app-private storage we always have access to.
+     */
+    fun scanImportedGames(): List<MenuItem> {
+        val dir = RomImporter.gamesDir(context)
+        val files = dir.listFiles() ?: return emptyList()
+        return files
+            .filter { it.isFile && it.extension.lowercase() in ROM_EXTENSIONS }
+            .map {
+                MenuItem(
+                    label = it.nameWithoutExtension,
+                    path = it.absolutePath,
+                    type = "psp_iso",
+                    iconFilename = "psp game.png"
+                )
+            }
+            .sortedBy { it.label.lowercase() }
+    }
+
     /** Factory reset: clears profile + settings, returning to the setup wizard. */
     fun factoryReset() {
         profileFile.delete()
@@ -84,5 +105,8 @@ class ConfigRepository(private val context: Context) {
         private const val PROFILE_FILE = "user_profile.json"
         private const val SETTINGS_FILE = "settings.json"
         private const val CUSTOM_THEME_FILE = "custom_theme.json"
+
+        /** ROM file extensions PPSSPP can open (kept in sync with RomImporter/RomScanner). */
+        private val ROM_EXTENSIONS = setOf("iso", "cso", "pbp", "chd", "prx", "elf")
     }
 }

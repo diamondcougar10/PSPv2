@@ -25,6 +25,7 @@ import com.pspv2.launcher.ui.screens.AboutScreen
 import com.pspv2.launcher.ui.screens.CustomThemeCreatorScreen
 import com.pspv2.launcher.ui.screens.GameStartupScreen
 import com.pspv2.launcher.ui.screens.HowToAddGamesScreen
+import com.pspv2.launcher.ui.screens.ImportStatusBanner
 import com.pspv2.launcher.ui.screens.IntroScreen
 import com.pspv2.launcher.ui.screens.PpssppMissingDialog
 import com.pspv2.launcher.ui.screens.QuickMenuOverlay
@@ -63,6 +64,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** SAF file picker for importing a single downloaded ROM or .zip. */
+    private val pickRomFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            viewModel.onRomFilePicked(uri)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -71,6 +84,23 @@ class MainActivity : ComponentActivity() {
                 when (event) {
                     UiEvent.Exit -> finish()
                     UiEvent.PickRomFolder -> runCatching { pickRomFolder.launch(null) }
+                    UiEvent.PickRomFile -> runCatching {
+                        // ROM downloads come in many archive formats (zip/7z/rar/tar/gz…);
+                        // "*/*" keeps the picker from hiding files some providers report odd
+                        // or missing MIME types for, while the named types aid discovery.
+                        pickRomFile.launch(arrayOf(
+                            "application/zip",
+                            "application/x-7z-compressed",
+                            "application/x-rar-compressed",
+                            "application/vnd.rar",
+                            "application/x-tar",
+                            "application/gzip",
+                            "application/x-bzip2",
+                            "application/x-xz",
+                            "application/octet-stream",
+                            "*/*"
+                        ))
+                    }
                 }
             }
         }
@@ -101,6 +131,12 @@ class MainActivity : ComponentActivity() {
                                 selectedIndex = state.quickMenuIndex,
                                 onSelect = viewModel::selectQuickMenu,
                                 onConfirm = viewModel::confirmQuickMenu
+                            )
+                        }
+                        state.importStatus?.let {
+                            ImportStatusBanner(
+                                status = it,
+                                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
                             )
                         }
                     }

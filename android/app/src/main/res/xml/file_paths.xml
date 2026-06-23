@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Imported ROMs live in filesDir/games and are shared with PPSSPP as content:// URIs. -->
+    <files-path name="games" path="games/" />
+</paths>

@@ -4,7 +4,10 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.pspv2.launcher.data.AppSettings
 import com.pspv2.launcher.data.MenuItem
@@ -23,7 +26,11 @@ class GameLauncher(private val context: Context) {
         return when (item.type) {
             "psp_iso", "psp_eboot" -> launchPsp(item, settings)
             "web_url" -> openUri(item.path)
-            "folder" -> openFolder(item.path)
+            "app_gallery" -> openAppCategory(Intent.CATEGORY_APP_GALLERY, "gallery")
+            "app_music" -> openAppCategory(Intent.CATEGORY_APP_MUSIC, "music player")
+            "app_calculator" -> openAppCategory(Intent.CATEGORY_APP_CALCULATOR, "calculator")
+            "app_files", "folder" -> openFiles()
+            "android_settings" -> openSettings()
             "pc_app" -> Result.UNSUPPORTED // desktop-only items have no Android meaning
             else -> Result.UNSUPPORTED
         }
@@ -79,11 +86,16 @@ class GameLauncher(private val context: Context) {
     }
 
     private fun toGameUri(path: String): Uri? = runCatching {
-        // Accept either an already-formed content:// / file:// URI or a raw path.
-        if (path.startsWith("content://") || path.startsWith("file://")) {
-            path.toUri()
-        } else {
-            Uri.fromFile(java.io.File(path))
+        when {
+            // Already a usable URI (SAF document picked by the user, etc.).
+            path.startsWith("content://") || path.startsWith("file://") -> path.toUri()
+            // A raw file path (an imported ROM in our private games folder). Other apps
+            // can't read our files directly, so expose it through the FileProvider.
+            else -> FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                java.io.File(path)
+            )
         }
     }.getOrNull()
 
@@ -99,16 +111,54 @@ class GameLauncher(private val context: Context) {
         }
     }
 
-    private fun openFolder(path: String): Result {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(toGameUri(path), "resource/folder")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+    /**
+     * Opens the device's default app for a well-known category (gallery, music,
+     * calculator) using the same mechanism the Android launcher uses, so the user
+     * lands in whatever app they already use for that purpose.
+     */
+    private fun openAppCategory(category: String, label: String): Result {
+        val intent = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, category)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             context.startActivity(intent)
             Result.HANDLED
         } catch (e: ActivityNotFoundException) {
+            toast("No $label app found")
+            Result.UNSUPPORTED
+        }
+    }
+
+    /** Opens the system Files app, falling back to a document picker on older devices. */
+    private fun openFiles(): Result {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val filesApp = Intent.makeMainSelectorActivity(
+                Intent.ACTION_MAIN, Intent.CATEGORY_APP_FILES
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val opened = runCatching { context.startActivity(filesApp); true }.getOrDefault(false)
+            if (opened) return Result.HANDLED
+        }
+        val picker = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(picker)
+            Result.HANDLED
+        } catch (e: ActivityNotFoundException) {
             toast("No file manager available")
+            Result.UNSUPPORTED
+        }
+    }
+
+    /** Opens the Android system settings. */
+    private fun openSettings(): Result {
+        val intent = Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            Result.HANDLED
+        } catch (e: ActivityNotFoundException) {
+            toast("Settings unavailable")
             Result.UNSUPPORTED
         }
     }

@@ -78,6 +78,13 @@ dependencies {
     // JSON parsing for menu/settings/profile config
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
+    // Archive extraction for imported ROMs. Commons Compress handles 7z/zip/tar plus
+    // gzip/bzip2/xz wrappers (the formats most PSP ROM sites serve); the xz dependency
+    // supplies the LZMA/LZMA2 codecs, and junrar adds RAR support.
+    implementation("org.apache.commons:commons-compress:1.27.1")
+    implementation("org.tukaani:xz:1.10")
+    implementation("com.github.junrar:junrar:7.5.5")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
 }
