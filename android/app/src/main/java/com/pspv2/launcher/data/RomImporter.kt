@@ -38,12 +38,18 @@ object RomImporter {
     private val ROM_EXTENSIONS = setOf("iso", "cso", "pbp", "chd", "prx", "elf")
 
     /** Outcome of an import attempt, surfaced to the UI. */
-    data class Result(val item: MenuItem?, val message: String, val success: Boolean)
+    data class Result(val items: List<MenuItem>, val message: String, val success: Boolean) {
+        /** Convenience for callers that only care about the first/primary game. */
+        val item: MenuItem? get() = items.firstOrNull()
+    }
 
     /** Internal extraction outcome so we can tell "not this format" from "no ROM inside". */
     private sealed interface Extracted {
-        data class Done(val file: File) : Extracted
+        /** Recognised this container and pulled out one or more ROMs. */
+        data class Done(val files: List<File>) : Extracted
+        /** Recognised the container but it held no PSP ROM. */
         object NoRom : Extracted
+        /** Not this archive type; let the next strategy try. */
         object NotThisFormat : Extracted
     }
 
@@ -66,13 +72,14 @@ object RomImporter {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Import failed", e)
-            Result(null, "Import failed: ${e.message ?: "unknown error"}", false)
+            Result(emptyList(), "Import failed: ${e.message ?: "unknown error"}", false)
         }
     }
 
     /**
      * Stages the picked file to the cache (so seek-based formats like 7z/rar work) and
-     * tries each extraction strategy until one recognises the format.
+     * tries each extraction strategy until one recognises the format. Extracts *every*
+     * PSP ROM in the archive, so multi-disc games and ROM packs all install at once.
      */
     private fun importArchive(
         context: Context,
@@ -87,7 +94,7 @@ object RomImporter {
                 FileOutputStream(temp).use { out ->
                     copyStream(raw, out) { bytes -> onProgress("Reading $archiveName (${mb(bytes)})") }
                 }
-            } ?: return Result(null, "Could not open $archiveName", false)
+            } ?: return Result(emptyList(), "Could not open $archiveName", false)
 
             val gamesDir = gamesDir(context)
             // Try every container type; the first one that recognises the bytes wins.
@@ -100,20 +107,22 @@ object RomImporter {
             var recognised = false
             for (strategy in strategies) {
                 when (val outcome = strategy()) {
-                    is Extracted.Done ->
-                        return Result(
-                            toMenuItem(outcome.file),
-                            "Installed ${outcome.file.nameWithoutExtension}",
-                            true
-                        )
+                    is Extracted.Done -> {
+                        val items = outcome.files.map { toMenuItem(it) }
+                        val message = when (items.size) {
+                            1 -> "Installed ${items.first().label}"
+                            else -> "Installed ${items.size} games from $archiveName"
+                        }
+                        return Result(items, message, true)
+                    }
                     Extracted.NoRom -> recognised = true
                     Extracted.NotThisFormat -> Unit
                 }
             }
             return if (recognised) {
-                Result(null, "No PSP ROM found inside $archiveName", false)
+                Result(emptyList(), "No PSP ROM found inside $archiveName", false)
             } else {
-                Result(null, "Unsupported or corrupt archive: $archiveName", false)
+                Result(emptyList(), "Unsupported or corrupt archive: $archiveName", false)
             }
         } finally {
             temp.delete()
@@ -123,17 +132,18 @@ object RomImporter {
     /** 7z is seek-based, so it reads the staged file directly. */
     private fun extractSevenZ(temp: File, gamesDir: File, onProgress: (String) -> Unit): Extracted {
         return try {
+            val files = mutableListOf<File>()
             SevenZFile.builder().setFile(temp).get().use { sevenZ ->
                 var entry = sevenZ.nextEntry
                 while (entry != null) {
                     val name = entry.name?.substringAfterLast('/').orEmpty()
                     if (!entry.isDirectory && name.romMatches()) {
-                        return writeEntry(gamesDir, name, sevenZ.getInputStream(entry), onProgress)
+                        files += writeStream(gamesDir, name, sevenZ.getInputStream(entry), onProgress)
                     }
                     entry = sevenZ.nextEntry
                 }
             }
-            Extracted.NoRom
+            if (files.isEmpty()) Extracted.NoRom else Extracted.Done(files)
         } catch (e: Exception) {
             Extracted.NotThisFormat
         }
@@ -142,6 +152,7 @@ object RomImporter {
     /** RAR (incl. RAR5) via junrar. */
     private fun extractRar(temp: File, gamesDir: File, onProgress: (String) -> Unit): Extracted {
         return try {
+            val files = mutableListOf<File>()
             Archive(temp).use { archive ->
                 var header = archive.nextFileHeader()
                 while (header != null) {
@@ -150,12 +161,12 @@ object RomImporter {
                         val outFile = File(gamesDir, sanitize(name))
                         onProgress("Extracting $name…")
                         FileOutputStream(outFile).use { out -> archive.extractFile(header, out) }
-                        return Extracted.Done(outFile)
+                        files += outFile
                     }
                     header = archive.nextFileHeader()
                 }
             }
-            Extracted.NoRom
+            if (files.isEmpty()) Extracted.NoRom else Extracted.Done(files)
         } catch (e: Exception) {
             Extracted.NotThisFormat
         }
@@ -169,8 +180,8 @@ object RomImporter {
     ): Extracted {
         return try {
             BufferedInputStream(FileInputStream(temp)).use { bis ->
-                ArchiveStreamFactory().createArchiveInputStream<ArchiveEntry>(bis).use { ai ->
-                    findRomInArchive(ai, gamesDir, onProgress)
+                ArchiveStreamFactory().createArchiveInputStream<ArchiveInputStream<ArchiveEntry>>(bis).use { ai ->
+                    findRomsInArchive(ai, gamesDir, onProgress)
                 }
             }
         } catch (e: Exception) {
@@ -194,16 +205,16 @@ object RomImporter {
                     val buffered = BufferedInputStream(comp)
                     // Case 1: the decompressed stream is itself an archive (tar.gz, tgz…).
                     val asArchive: ArchiveInputStream<*>? = runCatching {
-                        ArchiveStreamFactory().createArchiveInputStream<ArchiveEntry>(buffered)
+                        ArchiveStreamFactory().createArchiveInputStream<ArchiveInputStream<ArchiveEntry>>(buffered)
                     }.getOrNull()
                     if (asArchive != null) {
-                        return asArchive.use { findRomInArchive(it, gamesDir, onProgress) }
+                        return asArchive.use { findRomsInArchive(it, gamesDir, onProgress) }
                     }
                     // Case 2: a single compressed ROM (e.g. game.iso.gz). Strip the
                     // compressor extension to recover the ROM name.
                     val innerName = archiveName.substringBeforeLast('.', archiveName)
                     if (innerName.romMatches()) {
-                        return writeEntry(gamesDir, innerName, buffered, onProgress)
+                        return Extracted.Done(listOf(writeStream(gamesDir, innerName, buffered, onProgress)))
                     }
                     Extracted.NoRom
                 }
@@ -213,35 +224,37 @@ object RomImporter {
         }
     }
 
-    /** Walks an [ArchiveInputStream], extracting the first PSP ROM entry it finds. */
-    private fun findRomInArchive(
+    /** Walks an [ArchiveInputStream], extracting every PSP ROM entry it finds. */
+    private fun findRomsInArchive(
         ai: ArchiveInputStream<*>,
         gamesDir: File,
         onProgress: (String) -> Unit
     ): Extracted {
+        val files = mutableListOf<File>()
         var entry = ai.nextEntry
         while (entry != null) {
             val name = entry.name.substringAfterLast('/').substringAfterLast('\\')
             if (!entry.isDirectory && name.romMatches() && ai.canReadEntryData(entry)) {
-                return writeEntry(gamesDir, name, ai, onProgress)
+                files += writeStream(gamesDir, name, ai, onProgress)
             }
             entry = ai.nextEntry
         }
-        return Extracted.NoRom
+        return if (files.isEmpty()) Extracted.NoRom else Extracted.Done(files)
     }
 
-    private fun writeEntry(
+    /** Writes one entry stream to the games folder and returns the file. */
+    private fun writeStream(
         gamesDir: File,
         entryName: String,
         input: InputStream,
         onProgress: (String) -> Unit
-    ): Extracted {
+    ): File {
         val outFile = File(gamesDir, sanitize(entryName))
         onProgress("Extracting $entryName…")
         FileOutputStream(outFile).use { out ->
             copyStream(input, out) { bytes -> onProgress("Extracting $entryName (${mb(bytes)})") }
         }
-        return Extracted.Done(outFile)
+        return outFile
     }
 
     private fun importDirect(
@@ -254,13 +267,13 @@ object RomImporter {
         val outFile = File(gamesDir, sanitize(displayName))
         onProgress("Copying $displayName…")
         val input = context.contentResolver.openInputStream(source)
-            ?: return Result(null, "Could not open $displayName", false)
+            ?: return Result(emptyList(), "Could not open $displayName", false)
         input.use { raw ->
             FileOutputStream(outFile).use { out ->
                 copyStream(raw, out) { bytes -> onProgress("Copying $displayName (${mb(bytes)})") }
             }
         }
-        return Result(toMenuItem(outFile), "Installed ${outFile.nameWithoutExtension}", true)
+        return Result(listOf(toMenuItem(outFile)), "Installed ${outFile.nameWithoutExtension}", true)
     }
 
     private fun toMenuItem(file: File) = MenuItem(

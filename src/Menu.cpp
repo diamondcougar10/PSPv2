@@ -669,6 +669,17 @@ void Menu::scanRomsFolder() {
             
             if (!assets.audioPath.empty()) {
                 item.previewAudioPath = assets.audioPath;
+
+                // Load the intro audio so it plays when this game is highlighted.
+                // (Scanned games skip the menu.json loader that normally does this.)
+                item.previewBuffer = std::make_shared<sf::SoundBuffer>();
+                if (item.previewBuffer->loadFromFile(item.previewAudioPath)) {
+                    item.hasPreviewAudio = true;
+                    std::cout << "Loaded preview audio: " << item.previewAudioPath << "\n";
+                } else {
+                    std::cerr << "Warning: failed to load preview audio " << item.previewAudioPath << "\n";
+                    item.previewBuffer.reset();
+                }
             }
 
             std::cout << "Processed assets for " << filename << "\n";

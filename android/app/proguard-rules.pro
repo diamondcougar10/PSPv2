@@ -17,3 +17,12 @@
 -dontwarn org.apache.commons.compress.**
 -dontwarn org.tukaani.xz.**
 -dontwarn com.github.junrar.**
+# junrar logs through slf4j-api, whose static binder is provided at runtime by an
+# optional backend we don't bundle. Silence the missing-class reference.
+-dontwarn org.slf4j.**
+
+# Credential Manager + Google ID token sign-in: keep the public API surface used via
+# reflection/Play services, and silence optional references.
+-keep class androidx.credentials.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-dontwarn com.google.android.libraries.identity.googleid.**

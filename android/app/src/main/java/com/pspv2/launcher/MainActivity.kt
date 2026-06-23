@@ -64,15 +64,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** SAF file picker for importing a single downloaded ROM or .zip. */
+    /** SAF file picker for importing one or more downloaded ROMs / archives. */
     private val pickRomFile = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            runCatching {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                runCatching {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
             }
-            viewModel.onRomFilePicked(uri)
+            viewModel.onRomFilesPicked(uris)
         }
     }
 

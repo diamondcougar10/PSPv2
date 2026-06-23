@@ -35,6 +35,26 @@ private fun loadAssetBitmap(context: Context, assetPath: String): ImageBitmap? {
     }.getOrNull()
 }
 
+/**
+ * Loads an image from an absolute filesystem path (e.g. a cached game ICON0.PNG under
+ * filesDir/previews). Returns null while loading or if the file is missing/unreadable.
+ */
+@Composable
+fun rememberFileImage(filePath: String?): ImageBitmap? {
+    var bitmap by remember(filePath) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(filePath) {
+        bitmap = if (filePath.isNullOrBlank()) null else loadFileBitmap(filePath)
+    }
+    return bitmap
+}
+
+private fun loadFileBitmap(filePath: String): ImageBitmap? {
+    return runCatching {
+        val file = java.io.File(filePath)
+        if (!file.exists()) null else BitmapFactory.decodeFile(filePath)?.asImageBitmap()
+    }.getOrNull()
+}
+
 /** Resolves a bare icon filename to its assets/Icons/ path. */
 fun iconAssetPath(filename: String): String? =
     if (filename.isBlank()) null else "Icons/$filename"

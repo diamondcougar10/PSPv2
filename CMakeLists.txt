@@ -9,7 +9,24 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   # no-op; user can pass -DCMAKE_TOOLCHAIN_FILE=... if they use vcpkg
 endif()
 
-find_package(SFML 3 COMPONENTS Graphics Window System Audio REQUIRED)
+# Help CMake locate SFML when it is installed via vcpkg or a custom prefix.
+if(NOT DEFINED SFML_DIR)
+  if(DEFINED ENV{SFML_DIR})
+    set(SFML_DIR "$ENV{SFML_DIR}")
+  elseif(DEFINED ENV{VCPKG_ROOT})
+    if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+      if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(VCPKG_TARGET_TRIPLET "x64-windows")
+      else()
+        set(VCPKG_TARGET_TRIPLET "x86-windows")
+      endif()
+    endif()
+    list(APPEND CMAKE_PREFIX_PATH "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}")
+    set(SFML_DIR "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}/share/sfml")
+  endif()
+endif()
+
+find_package(SFML 3 CONFIG COMPONENTS Graphics Window System Audio REQUIRED)
 
 set(SOURCES
   src/main.cpp

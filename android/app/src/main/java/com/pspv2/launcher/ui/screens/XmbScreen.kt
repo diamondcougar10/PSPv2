@@ -1,5 +1,6 @@
 package com.pspv2.launcher.ui.screens
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -8,16 +9,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +43,7 @@ import com.pspv2.launcher.ui.UiState
 import com.pspv2.launcher.ui.backgroundAssetPath
 import com.pspv2.launcher.ui.iconAssetPath
 import com.pspv2.launcher.ui.rememberAssetImage
+import com.pspv2.launcher.ui.rememberFileImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 
@@ -103,12 +108,102 @@ fun XmbScreen(
             )
         }
 
+        // When a game is highlighted, show its PIC1 artwork behind the XMB, like the
+        // desktop launcher's preview background.
+        GameBackdrop(state.currentItem)
+
         Column(Modifier.fillMaxSize().padding(24.dp)) {
             StatusBar(state, textColor)
             Spacer(Modifier.height(16.dp))
             CategoryRow(state.categories, state.categoryIndex, accent)
             Spacer(Modifier.height(24.dp))
             state.currentCategory?.let { ItemList(it, state.itemIndex, accent, textColor) }
+        }
+
+        // Highlighted game's ICON0 preview card + its intro audio (best effort).
+        GamePreviewCard(
+            state.currentItem,
+            accent,
+            Modifier.align(Alignment.TopEnd).padding(24.dp)
+        )
+        GamePreviewAudio(state.currentItem)
+    }
+}
+
+/** True when this item is a playable PSP game (vs. an action/link item). */
+private fun MenuItem?.isGame(): Boolean =
+    this != null && (type == "psp_iso" || type == "psp_eboot")
+
+@Composable
+private fun GameBackdrop(item: MenuItem?) {
+    Crossfade(targetState = if (item.isGame()) item?.previewBgPath.orEmpty() else "", label = "gameBg") { path ->
+        val bg = rememberFileImage(path.ifBlank { null })
+        if (bg != null) {
+            Box(Modifier.fillMaxSize()) {
+                Image(
+                    bitmap = bg,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().alpha(0.55f)
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xCC0A1A2F), Color(0x660A1A2F), Color(0xEE0A1A2F))
+                        )
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GamePreviewCard(item: MenuItem?, accent: Color, modifier: Modifier = Modifier) {
+    if (!item.isGame()) return
+    val icon = rememberFileImage(item?.previewImagePath?.ifBlank { null })
+    if (icon == null) return
+    Box(
+        modifier
+            .width(240.dp)
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(10.dp))
+            .border(2.dp, accent, RoundedCornerShape(10.dp))
+            .background(Color(0xAA000000))
+    ) {
+        Image(
+            bitmap = icon,
+            contentDescription = item?.label,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().padding(6.dp)
+        )
+    }
+}
+
+/**
+ * Plays the highlighted game's SND0 intro audio on a loop while it stays selected,
+ * mirroring the desktop preview. Best effort: many devices can't decode ATRAC3
+ * (.AT3), in which case playback simply fails silently.
+ */
+@Composable
+private fun GamePreviewAudio(item: MenuItem?) {
+    val path = if (item.isGame()) item?.previewAudioPath.orEmpty() else ""
+    DisposableEffect(path) {
+        var player: android.media.MediaPlayer? = null
+        if (path.isNotBlank() && java.io.File(path).exists()) {
+            runCatching {
+                player = android.media.MediaPlayer().apply {
+                    setDataSource(path)
+                    isLooping = true
+                    setOnPreparedListener { runCatching { start() } }
+                    setOnErrorListener { mp, _, _ -> runCatching { mp.release() }; true }
+                    prepareAsync()
+                }
+            }
+        }
+        onDispose {
+            runCatching { player?.stop() }
+            runCatching { player?.release() }
         }
     }
 }
@@ -186,9 +281,16 @@ private fun ItemRow(item: MenuItem, selected: Boolean, accent: Color, textColor:
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val icon = rememberAssetImage(iconAssetPath(item.iconFilename))
+        // Prefer the game's real extracted ICON0 when available, else the asset icon.
+        val gameIcon = rememberFileImage(item.previewImagePath.ifBlank { null })
+        val icon = gameIcon ?: rememberAssetImage(iconAssetPath(item.iconFilename))
         if (icon != null) {
-            Image(bitmap = icon, contentDescription = item.label, Modifier.size(32.dp))
+            Image(
+                bitmap = icon,
+                contentDescription = item.label,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(32.dp)
+            )
             Spacer(Modifier.width(12.dp))
         }
         Column {

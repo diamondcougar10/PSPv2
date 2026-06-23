@@ -10,6 +10,7 @@ import com.pspv2.launcher.data.AppSettings
 import com.pspv2.launcher.data.Category
 import com.pspv2.launcher.data.ConfigRepository
 import com.pspv2.launcher.data.CustomTheme
+import com.pspv2.launcher.data.GameAssetCache
 import com.pspv2.launcher.data.MenuConfig
 import com.pspv2.launcher.data.MenuItem
 import com.pspv2.launcher.data.RomImporter
@@ -91,6 +92,9 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
 
     /** ROMs discovered by scanning the user's chosen SAF folder (Scan ROM Folder). */
     private var safGames: List<MenuItem> = emptyList()
+
+    /** Background job that extracts each game's icon/background/title/intro audio. */
+    private var enrichJob: kotlinx.coroutines.Job? = null
 
     /** One-shot UI events the host activity reacts to (e.g. exit). */
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)
@@ -184,12 +188,50 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     private fun rebuildGamesCategory() {
         val imported = runCatching { repo.scanImportedGames() }.getOrDefault(emptyList())
         val games = (imported + safGames).distinctBy { it.path }.sortedBy { it.label.lowercase() }
-        val items = gamesAnchors + games
+        applyGamesItems(games)
+        enrichGames(games)
+    }
+
+    /**
+     * Recomposes the "games" category from a games list: permanent action anchors
+     * (e.g. "Install Game"), an online-ROMs shortcut when empty, then the games.
+     */
+    private fun applyGamesItems(games: List<MenuItem>) {
+        // When the user has no games yet, offer a shortcut to a PSP ROM catalogue so
+        // they can download a ROM and install it straight into the launcher.
+        val emptyHelpers = if (games.isEmpty()) listOf(BROWSE_ROMS_ONLINE) else emptyList()
+        val items = gamesAnchors + emptyHelpers + games
         _state.update { st ->
             val updated = st.categories.map { cat ->
                 if (cat.id == "games") cat.copy(items = items) else cat
             }
             st.copy(categories = updated)
+        }
+    }
+
+    /**
+     * Extracts each game's embedded icon, background, title and intro audio (mirroring
+     * the desktop RomAssetManager) on a background thread, then refreshes the Games
+     * category so the real PSP artwork and titles appear instead of generic icons.
+     */
+    private fun enrichGames(games: List<MenuItem>) {
+        if (games.isEmpty()) return
+        enrichJob?.cancel()
+        enrichJob = viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val enriched = games.map { item ->
+                if (item.type != "psp_iso" && item.type != "psp_eboot") return@map item
+                val assets = runCatching { GameAssetCache.getOrExtract(app, item.path, item.label) }
+                    .getOrNull() ?: return@map item
+                item.copy(
+                    label = assets.title.ifBlank { item.label },
+                    previewImagePath = assets.iconPath,
+                    previewBgPath = assets.backgroundPath,
+                    coverArtPath = assets.backgroundPath,
+                    previewAudioPath = assets.audioPath
+                )
+            }.sortedBy { it.label.lowercase() }
+            withContext(Dispatchers.Main) { applyGamesItems(enriched) }
         }
     }
 
@@ -208,7 +250,9 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     fun completeSetup(profile: UserProfile) {
         val saved = profile.copy(first_time_setup = false)
         repo.saveProfile(saved)
-        _state.update { it.copy(profile = saved, screen = AppScreen.Menu) }
+        // Replay the PSPV2 intro after the account is set up; onIntroFinished()
+        // routes to Menu once first_time_setup is false.
+        _state.update { it.copy(profile = saved, screen = AppScreen.Intro) }
     }
 
     fun goTo(screen: AppScreen) = _state.update { it.copy(screen = screen) }
@@ -377,35 +421,57 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Called by the activity once the user picks a downloaded ROM/.zip from the
-     * document picker. Copies/extracts it into the games folder off the main thread,
-     * streaming progress to the on-screen banner, then refreshes the Games category.
+     * Called by the activity once the user picks one or more downloaded ROMs/archives
+     * from the document picker. Imports each in turn off the main thread, streaming
+     * progress to the on-screen banner, then refreshes the Games category. Supports
+     * any mix of raw ROMs and archives (zip/7z/rar/tar/gz…), and archives that contain
+     * several games are fully unpacked — so a whole library installs in one action.
      */
-    fun onRomFilePicked(source: Uri) {
+    fun onRomFilesPicked(sources: List<Uri>) {
+        if (sources.isEmpty()) return
         _state.update { it.copy(importStatus = ImportStatus("Starting import…", busy = true)) }
         sounds.playDecide()
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                RomImporter.import(getApplication(), source) { progress ->
-                    _state.update { it.copy(importStatus = ImportStatus(progress, busy = true)) }
+            var installed = 0
+            var failed = 0
+            val total = sources.size
+            withContext(Dispatchers.IO) {
+                sources.forEachIndexed { index, source ->
+                    val prefix = if (total > 1) "[${index + 1}/$total] " else ""
+                    val result = RomImporter.import(getApplication(), source) { progress ->
+                        _state.update { it.copy(importStatus = ImportStatus(prefix + progress, busy = true)) }
+                    }
+                    if (result.success) installed += result.items.size else failed++
                 }
             }
-            if (result.success) {
+            val success = installed > 0
+            if (success) {
                 sounds.playSystemOk()
                 rebuildGamesCategory()
                 focusGamesCategory()
             } else {
                 sounds.playError()
             }
+            val message = buildImportSummary(installed, failed)
             _state.update {
-                it.copy(importStatus = ImportStatus(result.message, busy = false, isError = !result.success))
+                it.copy(importStatus = ImportStatus(message, busy = false, isError = !success))
             }
             // Auto-dismiss the banner after letting the user read the result.
-            delay(if (result.success) 3500 else 5000)
+            delay(if (success) 3500 else 5000)
             _state.update {
                 if (it.importStatus?.busy == true) it else it.copy(importStatus = null)
             }
         }
+    }
+
+    /** Single-file convenience wrapper kept for callers that pick just one ROM. */
+    fun onRomFilePicked(source: Uri) = onRomFilesPicked(listOf(source))
+
+    private fun buildImportSummary(installed: Int, failed: Int): String = when {
+        installed > 0 && failed == 0 ->
+            if (installed == 1) "Installed 1 game" else "Installed $installed games"
+        installed > 0 && failed > 0 -> "Installed $installed, $failed failed"
+        else -> "Import failed — no PSP ROM found"
     }
 
     /** Manually dismiss the import banner (e.g. on a button press). */
@@ -451,5 +517,18 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         sounds.release()
         super.onCleared()
+    }
+
+    companion object {
+        /**
+         * Shown in the Games category when the user has no ROMs installed: a web link
+         * to a PSP ROM catalogue. Downloaded ROMs can then be installed via "Install Game".
+         */
+        private val BROWSE_ROMS_ONLINE = MenuItem(
+            label = "Get PSP ROMs Online",
+            path = "https://www.romsgames.net/roms/playstation-portable/",
+            type = "web_url",
+            iconFilename = "psp internet.png"
+        )
     }
 }

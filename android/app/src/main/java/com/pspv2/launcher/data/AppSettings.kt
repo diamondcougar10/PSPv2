@@ -13,7 +13,11 @@ data class UserProfile(
     val show_date: Boolean = true,
     val theme: String = "Background3.png",
     val use_24_hour_format: Boolean = true,
-    val user_name: String = ""
+    val user_name: String = "",
+    /** Google account id (stable subject id) when the user signed in; blank if not. */
+    val google_id: String = "",
+    /** Google account email, shown in the profile when signed in. */
+    val google_email: String = ""
 )
 
 /**
