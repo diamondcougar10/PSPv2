@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -19,6 +23,8 @@ import androidx.compose.ui.unit.sp
 /** Simple About screen, replacing AboutScreen.cpp. */
 @Composable
 fun AboutScreen(ppssppInstalled: Boolean, onHowTo: () -> Unit, onBack: () -> Unit) {
+    val howToFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { howToFocus.requestFocus() } }
     Box(
         Modifier.fillMaxSize().background(Color(0xFF0A1A2F)).padding(32.dp),
         contentAlignment = Alignment.Center
@@ -39,7 +45,7 @@ fun AboutScreen(ppssppInstalled: Boolean, onHowTo: () -> Unit, onBack: () -> Uni
                 color = if (ppssppInstalled) Color(0xFF7CFF9E) else Color(0xFFFF7C7C),
                 fontSize = 16.sp
             )
-            Button(onClick = onHowTo) { Text("How to Add Games") }
+            Button(onClick = onHowTo, modifier = Modifier.focusRequester(howToFocus)) { Text("How to Add Games") }
             Button(onClick = onBack) { Text("Back") }
         }
     }

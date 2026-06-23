@@ -21,6 +21,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +55,8 @@ fun CustomThemeCreatorScreen(
     var bgEnd by remember { mutableStateOf(Color(initial.backgroundEnd)) }
     var accent by remember { mutableStateOf(Color(initial.accent)) }
     var textPrimary by remember { mutableStateOf(Color(initial.textPrimary)) }
+    val initialFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { initialFocus.requestFocus() } }
 
     Row(Modifier.fillMaxSize().background(Color(0xFF0A1A2F)).padding(24.dp)) {
         // ---- Editor column ----
@@ -98,6 +103,7 @@ fun CustomThemeCreatorScreen(
 
                 Button(
                     onClick = onBack,
+                    modifier = Modifier.focusRequester(initialFocus),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF33415A))
                 ) { Text("Cancel") }
             }

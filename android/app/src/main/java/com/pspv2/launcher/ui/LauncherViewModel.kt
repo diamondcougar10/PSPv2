@@ -50,7 +50,9 @@ data class UiState(
     val pendingLaunch: MenuItem? = null,
     val quickMenuVisible: Boolean = false,
     val quickMenuIndex: Int = 0,
-    val customTheme: CustomTheme = CustomTheme()
+    val customTheme: CustomTheme = CustomTheme(),
+    /** True when the user tried to launch a game but no PPSSPP build is installed. */
+    val ppssppMissing: Boolean = false
 ) {
     val currentCategory: Category? get() = categories.getOrNull(categoryIndex)
     val currentItem: MenuItem? get() = currentCategory?.items?.getOrNull(itemIndex)
@@ -73,6 +75,29 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
 
+    /**
+     * Scroll nudges (in dp) for long-text screens like "How to Add Games", so the
+     * gamepad's D-pad / analog stick can scroll content that has no selectable rows.
+     */
+    private val _scrollNudges = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+    val scrollNudges = _scrollNudges.asSharedFlow()
+
+    /** Emit a scroll request consumed by the currently visible scrollable screen. */
+    fun nudgeScroll(deltaDp: Int) {
+        sounds.playCursor()
+        _scrollNudges.tryEmit(deltaDp)
+    }
+
+    /** Skip the intro animation when the player presses a button. */
+    fun skipIntro() {
+        if (_state.value.screen == AppScreen.Intro) onIntroFinished()
+    }
+
+    /** Skip the PSP boot animation and hand straight off to PPSSPP. */
+    fun skipGameStartup() {
+        if (_state.value.screen == AppScreen.GameStartup) onGameStartupFinished()
+    }
+
     init {
         val menu: MenuConfig = repo.loadMenu()
         val profile = repo.loadProfile()
@@ -91,6 +116,23 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
         // added games show up without re-picking the folder.
         if (settings.games_tree_uri.isNotBlank()) {
             rescanSavedRomFolder(settings.games_tree_uri)
+        }
+        // Scan for an already-installed PPSSPP build and remember it, so the user
+        // never has to configure anything when PPSSPP is already on the device.
+        cacheInstalledPpsspp(settings)
+    }
+
+    /**
+     * Detects an installed PPSSPP build and, if found, stores its package name in
+     * settings. Runs once on startup; no-op (and no user action) when PPSSPP is
+     * already installed and previously remembered.
+     */
+    private fun cacheInstalledPpsspp(settings: AppSettings) {
+        val detected = launcher.detectInstalledPackage(settings) ?: return
+        if (detected != settings.ppsspp_package) {
+            val saved = _state.value.settings.copy(ppsspp_package = detected)
+            repo.saveSettings(saved)
+            _state.update { it.copy(settings = saved) }
         }
     }
 
@@ -250,8 +292,14 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
         sounds.playDecide()
         when (item.type) {
             "psp_iso", "psp_eboot" -> {
-                // Show the PSP boot animation, then launch on its completion.
-                _state.update { it.copy(pendingLaunch = item, screen = AppScreen.GameStartup) }
+                // Only show the boot animation if PPSSPP is actually present; otherwise
+                // prompt the user to install it instead of booting into nothing.
+                if (launcher.isPpssppInstalled(_state.value.settings)) {
+                    _state.update { it.copy(pendingLaunch = item, screen = AppScreen.GameStartup) }
+                } else {
+                    sounds.playError()
+                    _state.update { it.copy(ppssppMissing = true) }
+                }
             }
             "theme_select" -> goTo(AppScreen.ThemeSelect)
             "theme_create" -> goTo(AppScreen.ThemeCreate)
@@ -305,6 +353,19 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun isPpssppInstalled(): Boolean = launcher.isPpssppInstalled(_state.value.settings)
+
+    /** Dismisses the "PPSSPP not installed" prompt without taking action. */
+    fun dismissPpssppPrompt() {
+        sounds.playCancel()
+        _state.update { it.copy(ppssppMissing = false) }
+    }
+
+    /** Opens the PPSSPP store listing, then dismisses the prompt. */
+    fun installPpsspp() {
+        sounds.playSystemOk()
+        launcher.openPpssppStore()
+        _state.update { it.copy(ppssppMissing = false) }
+    }
 
     override fun onCleared() {
         sounds.release()

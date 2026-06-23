@@ -26,6 +26,7 @@ import com.pspv2.launcher.ui.screens.CustomThemeCreatorScreen
 import com.pspv2.launcher.ui.screens.GameStartupScreen
 import com.pspv2.launcher.ui.screens.HowToAddGamesScreen
 import com.pspv2.launcher.ui.screens.IntroScreen
+import com.pspv2.launcher.ui.screens.PpssppMissingDialog
 import com.pspv2.launcher.ui.screens.QuickMenuOverlay
 import com.pspv2.launcher.ui.screens.SetupScreen
 import com.pspv2.launcher.ui.screens.ThemeSelectScreen
@@ -45,6 +46,10 @@ class MainActivity : ComponentActivity() {
 
     // De-bounce flag so analog-stick motion only fires once per push.
     private var motionConsumed = false
+
+    // True while we are dispatching a synthetic D-pad key for Compose focus, so the
+    // re-entrant key callback ignores it instead of re-injecting (which would loop).
+    private var injectingFocusKey = false
 
     /** SAF folder picker for choosing the PSP ROM library directory. */
     private val pickRomFolder = registerForActivityResult(
@@ -124,7 +129,17 @@ class MainActivity : ComponentActivity() {
                     )
 
                     AppScreen.HowTo -> HowToAddGamesScreen(
-                        onBack = { viewModel.goTo(AppScreen.Menu) }
+                        onBack = { viewModel.goTo(AppScreen.Menu) },
+                        scrollNudges = viewModel.scrollNudges
+                    )
+                }
+
+                // Global prompt: shown over any screen when a game launch is attempted
+                // without PPSSPP installed.
+                if (state.ppssppMissing) {
+                    PpssppMissingDialog(
+                        onInstall = viewModel::installPpsspp,
+                        onDismiss = viewModel::dismissPpssppPrompt
                     )
                 }
             }
@@ -132,12 +147,16 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        // Ignore the synthetic D-pad events we inject for Compose focus traversal,
+        // otherwise we would map them straight back into another injection (loop).
+        if (injectingFocusKey) return super.onKeyDown(keyCode, event)
         val action = GamepadInput.fromKeyEvent(event)
         if (action != GamepadAction.NONE && routeAction(action)) return true
         return super.onKeyDown(keyCode, event)
     }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (injectingFocusKey) return super.onGenericMotionEvent(event)
         if (event.source and android.view.InputDevice.SOURCE_JOYSTICK ==
             android.view.InputDevice.SOURCE_JOYSTICK &&
             event.action == MotionEvent.ACTION_MOVE
@@ -158,19 +177,95 @@ class MainActivity : ComponentActivity() {
 
     /** Routes a normalised action to the current screen. Returns true if consumed. */
     private fun routeAction(action: GamepadAction): Boolean {
-        val screen = viewModel.state.value.screen
-        return when (screen) {
+        val state = viewModel.state.value
+        // The "install PPSSPP" prompt sits above everything; it captures input first.
+        if (state.ppssppMissing) {
+            return when (action) {
+                GamepadAction.CONFIRM -> { viewModel.installPpsspp(); true }
+                GamepadAction.CANCEL -> { viewModel.dismissPpssppPrompt(); true }
+                else -> true // swallow navigation so it doesn't move the menu behind the dialog
+            }
+        }
+        return when (val screen = state.screen) {
             AppScreen.Menu, AppScreen.ControllerSelect -> {
                 viewModel.onMenuAction(action)
                 true
             }
-            AppScreen.About, AppScreen.ThemeSelect, AppScreen.ThemeCreate, AppScreen.HowTo -> {
-                if (action == GamepadAction.CANCEL) {
-                    viewModel.onCancel()
-                    true
-                } else false
+
+            // Form screens (Setup, theme picker/creator, About) are driven by Compose's
+            // native focus system so D-pad, analog stick AND the A button all operate
+            // text fields, sliders and buttons. We translate every gamepad action into a
+            // standard D-pad key event and inject it so focus traversal / activation work.
+            AppScreen.Setup,
+            AppScreen.ThemeSelect,
+            AppScreen.ThemeCreate,
+            AppScreen.About -> {
+                routeFocusScreen(action, screen)
+                true
             }
-            else -> false
+
+            // Long-text screen: D-pad / stick scrolls, confirm or cancel returns.
+            AppScreen.HowTo -> {
+                when (action) {
+                    GamepadAction.UP -> viewModel.nudgeScroll(-SCROLL_STEP_DP)
+                    GamepadAction.DOWN -> viewModel.nudgeScroll(SCROLL_STEP_DP)
+                    GamepadAction.CANCEL, GamepadAction.CONFIRM -> viewModel.goTo(AppScreen.Menu)
+                    else -> Unit
+                }
+                true
+            }
+
+            // Animations: any confirm / cancel skips straight ahead.
+            AppScreen.Intro -> {
+                if (action == GamepadAction.CONFIRM || action == GamepadAction.CANCEL) {
+                    viewModel.skipIntro()
+                }
+                true
+            }
+            AppScreen.GameStartup -> {
+                if (action == GamepadAction.CONFIRM || action == GamepadAction.CANCEL) {
+                    viewModel.skipGameStartup()
+                }
+                true
+            }
         }
+    }
+
+    /**
+     * Drives a Compose-focus form screen with the gamepad. Cancel maps to the screen's
+     * natural "back" target; everything else is injected as a D-pad key so the focused
+     * control (button, slider, text field) reacts exactly as it would to a TV remote.
+     */
+    private fun routeFocusScreen(action: GamepadAction, screen: AppScreen) {
+        when (action) {
+            GamepadAction.CANCEL -> when (screen) {
+                AppScreen.ThemeCreate -> viewModel.goTo(AppScreen.ThemeSelect)
+                AppScreen.Setup -> Unit // first-time setup has no back
+                else -> viewModel.goTo(AppScreen.Menu)
+            }
+            GamepadAction.UP -> injectFocusKey(KeyEvent.KEYCODE_DPAD_UP)
+            GamepadAction.DOWN -> injectFocusKey(KeyEvent.KEYCODE_DPAD_DOWN)
+            GamepadAction.LEFT -> injectFocusKey(KeyEvent.KEYCODE_DPAD_LEFT)
+            GamepadAction.RIGHT -> injectFocusKey(KeyEvent.KEYCODE_DPAD_RIGHT)
+            GamepadAction.CONFIRM -> injectFocusKey(KeyEvent.KEYCODE_DPAD_CENTER)
+            GamepadAction.MENU, GamepadAction.NONE -> Unit
+        }
+    }
+
+    /** Dispatches a synthetic D-pad key event so Compose handles focus/activation. */
+    private fun injectFocusKey(keyCode: Int) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val decor = window.decorView
+        injectingFocusKey = true
+        try {
+            decor.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+            decor.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+        } finally {
+            injectingFocusKey = false
+        }
+    }
+
+    private companion object {
+        const val SCROLL_STEP_DP = 120
     }
 }

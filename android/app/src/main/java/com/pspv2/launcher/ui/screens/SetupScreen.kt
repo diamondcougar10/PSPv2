@@ -14,12 +14,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -39,6 +42,8 @@ fun SetupScreen(
     var showClock by remember { mutableStateOf(initial.show_clock) }
     var showDate by remember { mutableStateOf(initial.show_date) }
     var use24h by remember { mutableStateOf(initial.use_24_hour_format) }
+    val continueFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { continueFocus.requestFocus() } }
 
     Box(
         Modifier.fillMaxSize().background(Color(0xFF0A1A2F)).padding(32.dp),
@@ -76,7 +81,7 @@ fun SetupScreen(
                         )
                     )
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().focusRequester(continueFocus)
             ) {
                 Text("Continue")
             }
