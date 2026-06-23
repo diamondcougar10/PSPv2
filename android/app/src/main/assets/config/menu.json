@@ -1,0 +1,104 @@
+{
+  "categories": [
+    {
+      "id": "settings",
+      "label": "Settings",
+      "icon": "Settings.png",
+      "items": [
+        {
+          "label": "Themes",
+          "path": "themes",
+          "type": "theme_select",
+          "icon": "psp theme settings.png"
+        },
+        {
+          "label": "Create Theme",
+          "path": "theme_create",
+          "type": "theme_create",
+          "icon": "psp theme settings.png"
+        },
+        {
+          "label": "Scan ROM Folder",
+          "path": "scan_roms",
+          "type": "scan_roms",
+          "icon": "psp memory stick.png"
+        },
+        {
+          "label": "How to Add Games",
+          "path": "how_to_games",
+          "type": "how_to_games",
+          "icon": "psp question.png"
+        },
+        {
+          "label": "About PSPV2",
+          "path": "about",
+          "type": "about",
+          "icon": "psp question.png"
+        },
+        {
+          "label": "Get PPSSPP",
+          "path": "https://play.google.com/store/apps/details?id=org.ppsspp.ppsspp",
+          "type": "web_url",
+          "icon": "psp game.png"
+        },
+        {
+          "label": "Factory Reset",
+          "path": "factory_reset",
+          "type": "factory_reset",
+          "icon": "psp update.png"
+        }
+      ]
+    },
+    {
+      "id": "games",
+      "label": "Games",
+      "icon": "psp game.png",
+      "items": [
+        {
+          "label": "MotorStorm - Arctic Edge",
+          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
+          "type": "psp_iso",
+          "icon": "psp game.png"
+        }
+      ]
+    },
+    {
+      "id": "network",
+      "label": "Network",
+      "icon": "psp internet.png",
+      "items": [
+        {
+          "label": "Web Browser",
+          "path": "https://www.google.com",
+          "type": "web_url",
+          "icon": "psp internet.png"
+        },
+        {
+          "label": "YouTube",
+          "path": "https://www.youtube.com",
+          "type": "web_url",
+          "icon": "psp RSS.png"
+        },
+        {
+          "label": "Reddit PSP",
+          "path": "https://www.reddit.com/r/PSP",
+          "type": "web_url",
+          "icon": "psp RSS setting.png"
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "label": "Store",
+      "icon": "psp network.png",
+      "items": [
+        {
+          "label": "ROM Store",
+          "path": "https://romsfun.com/roms/playstation-portable/",
+          "type": "web_url",
+          "icon": "psp network update.png"
+        }
+      ]
+    }
+  ]
+}

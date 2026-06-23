@@ -61,3 +61,15 @@ ffmpeg_temp/
 
 dist/
 assets/Sounds/intro_audio.wav
+
+# Android (Gradle) build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/build-output.log
+android/captures/
+.gradle/
+
+# Log files
+*.log

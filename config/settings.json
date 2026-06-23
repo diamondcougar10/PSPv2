@@ -1,7 +1,9 @@
 {
-  "ppsspp_path": "Apps/PPSSPP/PPSSPPWindows64.exe",
-  "games_root": "Games",
+  "ppsspp_path": "C:/Program Files/PPSSPP/PPSSPPWindows64.exe",
+  "games_root": "C:/Users/curph/source/repos/PSPV2/Games",
+  "ppsspp_memstick_root": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP",
+  "ppsspp_savedata_path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SAVEDATA",
+  "ppsspp_system_path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SYSTEM",
   "fullscreen": true,
-  "emulator_fullscreen": true,
-  "use_24_hour_format": true
+  "emulator_fullscreen": true
 }

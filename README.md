@@ -85,11 +85,8 @@ PSPV2/
 
 ## Menu Categories
 
-- **Games**: PSP ROM library with UMD icons
-- **Network**: Web links and online resources
-- **Media**: Music, photos, video players
-- **Saved Data**: Quick access to PPSSPP save files
-- **Tools**: System utilities and applications
+Organized in authentic PSP XMB order (left to right):
+
 - **Settings**: 
   - PPSSPP Settings
   - Windows Settings
@@ -97,7 +94,34 @@ PSPV2/
   - Device Manager
   - Themes (background customization)
   - Factory Reset
+- **Photos**: Photo viewer and pictures folder
+- **Music**: Music player and library
+- **Videos**: Video player and videos folder
+- **Games**: PSP ROM library with UMD icons
+- **Network**: Web browser and online links
+- **PlayStation Store**: ROM downloads and downloads folder
+- **Saved Data**: Quick access to PPSSPP save files
+- **Extras**: System utilities and tools
 - **Exit**: Close application
+
+## PPSSPP Integration
+
+The launcher automatically configures PPSSPP to work like a real PSP console:
+
+- **Unified Save Storage**: All game saves stored in configured memstick directory
+- **System Data**: PPSSPP system files managed centrally
+- **User Profiles**: Profile settings persist across sessions
+- **Console Emulation**: Creates PSP directory structure (SAVEDATA, SYSTEM, GAME, etc.)
+
+### PPSSPP Configuration
+
+Edit `config/settings.json` to customize paths:
+- `ppsspp_path`: Location of PPSSPP executable
+- `ppsspp_memstick_root`: Root directory for PSP data (saves, system)
+- `ppsspp_savedata_path`: Game save data location
+- `ppsspp_system_path`: System configuration files
+- `games_root`: Directory for ROM files
+- `emulator_fullscreen`: Launch games in fullscreen mode
 
 ## Features in Detail
 

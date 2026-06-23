@@ -7,7 +7,7 @@
       "items": [
         {
           "label": "PPSSPP Settings",
-          "path": "Apps/PPSSPP/PPSSPPWindows64.exe",
+          "path": "C:/Program Files/PPSSPP/PPSSPPWindows64.exe",
           "type": "pc_app",
           "icon": "psp game.png"
         },
@@ -36,28 +36,10 @@
           "icon": "psp theme settings.png"
         },
         {
-          "label": "Create Custom Theme",
-          "path": "theme_creator",
-          "type": "theme_creator",
-          "icon": "psp photo settings.png"
-        },
-        {
-          "label": "Time Format (24H/12H)",
-          "path": "toggle_time_format",
-          "type": "toggle_time_format",
-          "icon": "psp question.png"
-        },
-        {
           "label": "Factory Reset",
           "path": "factory_reset",
           "type": "factory_reset",
           "icon": "psp update.png"
-        },
-        {
-          "label": "About",
-          "path": "about",
-          "type": "about",
-          "icon": "psp question.png"
         }
       ]
     },
@@ -106,7 +88,7 @@
       "items": [
         {
           "label": "Video Player",
-          "path": "Apps/VLC/vlc.exe",
+          "path": "C:/Program Files/VideoLAN/VLC/vlc.exe",
           "type": "pc_app",
           "icon": "psp video setting.png"
         },
@@ -122,7 +104,13 @@
       "id": "games",
       "label": "Games",
       "icon": "psp game.png",
-      "items": []
+      "items": [
+        {
+          "label": "MotorStorm - Arctic Edge",
+          "path": "MotorStorm - Arctic Edge (USA) (En,Fr,De,Es,It,Nl,Pt,Ru).iso",
+          "type": "psp_iso"
+        }
+      ]
     },
     {
       "id": "network",
@@ -162,7 +150,7 @@
         },
         {
           "label": "Downloads Folder",
-          "path": "Downloads",
+          "path": "C:/Users/curph/source/repos/PSPV2/Downloads",
           "type": "folder",
           "icon": "psp memorystick.png"
         }
@@ -175,7 +163,7 @@
       "items": [
         {
           "label": "Open Save Folder",
-          "path": "SavedData",
+          "path": "C:/Users/curph/OneDrive/Documents/PPSSPP/PSP/SAVEDATA",
           "type": "folder",
           "icon": "psp savedata.png"
         }
@@ -209,37 +197,6 @@
           "path": "taskmgr.exe",
           "type": "pc_app",
           "icon": "psp power settings.png"
-        }
-      ]
-    },
-    {
-      "id": "help",
-      "label": "Help & Support",
-      "icon": "psp question.png",
-      "items": [
-        {
-          "label": "Game Install Guide",
-          "path": "HOW_TO_ADD_GAMES.txt",
-          "type": "web_url",
-          "icon": "psp usb.png"
-        },
-        {
-          "label": "Controls Guide",
-          "path": "CONTROLS.txt",
-          "type": "web_url",
-          "icon": "psp system settings.png"
-        },
-        {
-          "label": "Contact Support",
-          "path": "mailto:userhelppspv@gmail.com",
-          "type": "web_url",
-          "icon": "psp network settings.png"
-        },
-        {
-          "label": "Open Help Folder",
-          "path": ".",
-          "type": "folder",
-          "icon": "psp memorystick.png"
         }
       ]
     },

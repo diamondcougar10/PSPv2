@@ -1,0 +1,11 @@
+<resources>
+    <!-- API 27+ override: enable drawing into display cutouts (notches). This
+         attribute requires API 27, so it is kept out of the base values/themes.xml
+         which must remain valid on the minSdk (26). -->
+    <style name="Theme.PSPV2" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>
