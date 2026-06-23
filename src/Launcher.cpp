@@ -4,7 +4,6 @@
 #include <iostream>
 #include <cstdlib>
 #include <filesystem>
-#include <algorithm>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -21,6 +20,9 @@ Launcher::Launcher(const std::string& settingsPath) {
     ifs >> j;
     ppssppPath_ = j.value("ppsspp_path", std::string(""));
     gamesRoot_ = j.value("games_root", std::string(""));
+    ppssppMemstickRoot_ = j.value("ppsspp_memstick_root", std::string(""));
+    ppssppSavedataPath_ = j.value("ppsspp_savedata_path", std::string(""));
+    ppssppSystemPath_ = j.value("ppsspp_system_path", std::string(""));
     emulatorFullscreen_ = j.value("emulator_fullscreen", true);
     
     if (ppssppPath_.empty()) {
@@ -29,6 +31,9 @@ Launcher::Launcher(const std::string& settingsPath) {
     if (gamesRoot_.empty()) {
       std::cerr << "Warning: games_root is missing in settings.json\n";
     }
+    
+    // Ensure PPSSPP directories exist
+    ensurePPSSPPDirectories();
   } catch (const std::exception& e) {
     std::cerr << "Error parsing settings.json: " << e.what() << "\n";
   }
@@ -65,6 +70,12 @@ void Launcher::launchItem(const MenuItem& item, bool useController) {
       cmd += " --fullscreen";
     }
     
+    // Add memstick root path if configured (PPSSPP will use this for saves/system data)
+    if (!ppssppMemstickRoot_.empty()) {
+      cmd += " --memstick=\"" + ppssppMemstickRoot_ + "\"";
+      std::cout << "Using memstick root: " << ppssppMemstickRoot_ << "\n";
+    }
+    
     // Configure input method
     if (useController) {
       std::cout << "Launching with PS5 Controller support\n";
@@ -72,50 +83,77 @@ void Launcher::launchItem(const MenuItem& item, bool useController) {
       std::cout << "Launching with Keyboard & Mouse\n";
     }
     
+    cmd += "\"";
+    
     std::cout << "Launching PPSSPP: " << cmd << "\n";
     int result = std::system(cmd.c_str());
     
     if (result != 0) {
       std::cerr << "PPSSPP exited with code " << result << "\n";
     }
+
   } else if (item.type == "pc_app") {
     std::string cmd = "\"" + item.path + "\"";
     std::cout << "Launching PC app: " << cmd << "\n";
     std::system(cmd.c_str());
   } else if (item.type == "folder") {
     // Open folder in Windows Explorer
-    // Convert forward slashes to backslashes for Windows paths
-    std::string normalizedPath = item.path;
-    std::replace(normalizedPath.begin(), normalizedPath.end(), '/', '\\');
-    
-    // Use /select, flag for specific folders to ensure correct path
-    std::string cmd = "explorer \"" + normalizedPath + "\"";
-    std::cout << "Opening folder: " << normalizedPath << "\n";
+    std::string cmd = "explorer \"" + item.path + "\"";
+    std::cout << "Opening folder: " << item.path << "\n";
     std::system(cmd.c_str());
   } else if (item.type == "web_url") {
-    // Open URL in default browser or file in default app
-    std::string path = item.path;
-    
-    // Check if it's a URL
-    bool isUrl = (path.find("http://") == 0 || path.find("https://") == 0 || path.find("mailto:") == 0 || path.find("www.") == 0);
-    
-    if (!isUrl) {
-        // It's likely a local file. Check if it exists.
-        if (fs::exists(path)) {
-            path = fs::absolute(path).string();
-        } else {
-            // Try checking in the current directory explicitly if not found
-            fs::path currentPath = fs::current_path() / path;
-            if (fs::exists(currentPath)) {
-                path = currentPath.string();
-            }
-        }
-    }
-
-    std::string cmd = "start \"\" \"" + path + "\"";
-    std::cout << "Opening: " << path << "\n";
+    // Open URL in default browser
+    std::string cmd = "start \"\" \"" + item.path + "\"";
+    std::cout << "Opening URL: " << item.path << "\n";
     std::system(cmd.c_str());
   } else {
     std::cerr << "Unknown item type: " << item.type << "\n";
+  }
+}
+
+void Launcher::ensurePPSSPPDirectories() {
+  // Create PPSSPP directory structure to mimic PSP console
+  if (!ppssppMemstickRoot_.empty()) {
+    fs::path memstickPath(ppssppMemstickRoot_);
+    
+    // Create main directories
+    std::vector<std::string> directories = {
+      "SAVEDATA",
+      "SYSTEM",
+      "GAME",
+      "PSP/SAVEDATA",
+      "PSP/SYSTEM",
+      "PSP/GAME",
+      "PSP/COMMON",
+      "ISO",
+      "MUSIC",
+      "PHOTO",
+      "VIDEO"
+    };
+    
+    for (const auto& dir : directories) {
+      fs::path fullPath = memstickPath / dir;
+      try {
+        if (!fs::exists(fullPath)) {
+          fs::create_directories(fullPath);
+          std::cout << "Created PPSSPP directory: " << fullPath << "\n";
+        }
+      } catch (const std::exception& e) {
+        std::cerr << "Failed to create directory " << fullPath << ": " << e.what() << "\n";
+      }
+    }
+    
+    // Create a system.txt file with console info
+    fs::path systemFile = memstickPath / "PSP" / "SYSTEM" / "system.txt";
+    if (!fs::exists(systemFile)) {
+      std::ofstream sysFile(systemFile);
+      if (sysFile) {
+        sysFile << "PSP Virtual Console v2.0\n";
+        sysFile << "Emulated PSP System\n";
+        sysFile << "Connected to PPSSPP\n";
+        sysFile.close();
+        std::cout << "Created system info file\n";
+      }
+    }
   }
 }
