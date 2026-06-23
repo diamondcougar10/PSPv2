@@ -25,7 +25,7 @@ object GoogleAuth {
      * OAuth 2.0 **Web application** client ID from the Google Cloud Console.
      * Looks like: 1234567890-abcdefg.apps.googleusercontent.com
      */
-    const val WEB_CLIENT_ID: String = ""
+    const val WEB_CLIENT_ID: String = "780367701956-6vndj2aqcrd0og885q3qktdfpqq2p2ef.apps.googleusercontent.com"
 
     /** Result of a sign-in attempt. */
     data class Account(val id: String, val displayName: String, val email: String)

@@ -91,6 +91,12 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
+    // credentials-play-services-auth drags in an old androidx.fragment transitively,
+    // which trips the InvalidFragmentVersionForActivityResult lint-vital check (this
+    // app is Compose/ComponentActivity-only and uses no fragments). Force a modern
+    // fragment version so the release lint passes.
+    implementation("androidx.fragment:fragment:1.8.6")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
 }
